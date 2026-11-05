@@ -1,0 +1,13 @@
+# Nunca versionar nada derivado do jogo
+*.iso
+*.xex
+*.xexp
+*.rpf
+tu0000*
+data/
+shader_cache/
+spirv/
+*gtav_game*
+gtav-android-pack*.zip
+*.ipa
+build/
