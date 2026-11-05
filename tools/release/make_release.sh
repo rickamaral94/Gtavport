@@ -31,8 +31,18 @@ Substitua a pasta android/ do seu launcher por esta e rode "Build for Android": 
 (gtav-android-pack.zip) fica casado com o GTAV.apk desta pasta (Gtavport, pacote com.gtavport.app).
 Nenhum código, shader ou dado do jogo está aqui: o pack é feito no seu PC, a partir dos seus discos.
 TXT
-(cd "$SHELL_OUT" && zip -q -r -X "$D/gtavport-android-$TAG.zip" .)
+# O app instala e compila o jogo no próprio aparelho: a pasta android/ para o PC não vai na release
+# (WITH_PC_PACK=1 a inclui, para quem quiser o fluxo antigo).
+[ "${WITH_PC_PACK:-0}" = 1 ] && (cd "$SHELL_OUT" && zip -q -r -X "$D/gtavport-android-$TAG.zip" .)
 cp "$SHELL_OUT/GTAV.apk" "$D/gtavport-$TAG.apk"
+# O build_apk.sh do upstream ignora erros do javac: confere que toda classe do Gtavport está no dex.
+python3 -I - "$D/gtavport-$TAG.apk" "$ROOT/odin2/android/java/com/gtavrecomp/app" <<'PY'
+import sys, zipfile, pathlib
+dex = zipfile.ZipFile(sys.argv[1]).read("classes.dex")
+missing = [p.stem for p in pathlib.Path(sys.argv[2]).glob("*.java") if f"Lcom/gtavrecomp/app/{p.stem};".encode() not in dex]
+if missing: sys.exit("classes do Gtavport fora do APK (erro de compilação Java?): " + ", ".join(missing))
+print("dex: todas as classes do Gtavport presentes")
+PY
 
 # 2) APK de prova (Etapa P), se compilado.
 [ -f "$ROOT/build/probe/gtavport-probe.apk" ] && cp "$ROOT/build/probe/gtavport-probe.apk" "$D/gtavport-probe-$TAG.apk"

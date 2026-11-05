@@ -4,8 +4,7 @@
 > esta release existe: para as primeiras medições (`docs/baseline.md`, `docs/etapa-p.md`).
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
-Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** (ou no seu
-PC, se preferir) a partir dos seus discos e nunca são distribuídos.
+Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.
 
 Gtavport é um fork de [andrewnakas/gtav-recomp](https://github.com/andrewnakas/gtav-recomp) (GPL-3.0) focado no
 AYN Odin 2 Portal Pro (Snapdragon 8 Gen 2 / Adreno 740). Commit: `@SHA@`.
@@ -15,24 +14,19 @@ AYN Odin 2 Portal Pro (Snapdragon 8 Gen 2 / Adreno 740). Commit: `@SHA@`.
 | Arquivo | O que é |
 |---|---|
 | `gtavport-@TAG@.apk` | O app (pacote `com.gtavport.app`, convive com o app do upstream). Sem código do jogo; traz o codegen, o clang/lld e o DXC para compilar o jogo no próprio aparelho. |
-| `gtavport-android-@TAG@.zip` | Pasta `android/` para o launcher do gtav-recomp **no PC**: gera o pack casado com este APK. |
 | `gtavport-probe-@TAG@.apk` | APK de prova da Etapa P: clang/lld/DXC rodando no aparelho (P1–P4). Não é o jogo. |
 | `LICENSES-@TAG@.zip` | Licenças e créditos de tudo que vai nos binários. |
 | `gtavport-@TAG@-source.tar.xz` | Fonte correspondente: este repositório, os patches e o gtav-recomp no commit fixado (demais dependências fixadas em `versions.lock`). |
 
-## Como usar o app: tudo no Odin 2, sem PC
+## Como usar: tudo no Odin 2, sem PC (como os ports de BOTW/TOTK)
 1. Copie para o aparelho os seus **Disc 1**, **Disc 2** (ISO ou pasta) e o **Title Update 27** (`tu00000009_00000000`).
-2. Instale `gtavport-@TAG@.apk` e abra. Toque em **Install + build on this device (no PC)**.
+2. Instale `gtavport-@TAG@.apk` e abra: ele já abre na tela **instalar e compilar neste aparelho**.
 3. Escolha os três arquivos e toque em **Instalar e compilar**. O app copia e confere ~16 GB, recompila o código
    do jogo no aparelho (codegen + clang nos núcleos grandes) e deixa tudo pronto. Precisa de ~25 GB livres
    durante a instalação. Pode sair da tela: a compilação continua (notificação). Se for interrompida, continua de
    onde parou.
 4. Toque em **Jogar**. Os shaders são traduzidos no aparelho enquanto você joga: nos primeiros minutos alguns
    objetos aparecem com atraso, e nas próximas vezes eles já estão prontos.
-
-### Alternativa: pelo PC
-No launcher do gtav-recomp no PC, substitua a pasta `android/` pelo conteúdo de `gtavport-android-@TAG@.zip` e rode
-**Build for Android**; no app, use o pack em vez da compilação no aparelho.
 
 ## O que há de novo em relação ao upstream
 - **Drivers Turnip:** tela "Driver gráfico" (importar zip no formato adrenotools, testar em processo separado,

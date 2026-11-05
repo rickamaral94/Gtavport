@@ -83,6 +83,30 @@ public final class Odin2DeviceBuild {
         }
     }
 
+    /**
+     * O jogo já está pronto para este APK: dados instalados e files/libgtav_game.so feita para esta
+     * libgtav_fast.so (o mesmo critério da tela de setup: a linha "shell" do pack.txt).
+     */
+    static boolean installed(Context c) {
+        try {
+            File ext = c.getExternalFilesDir(null);
+            if (ext == null || !new File(ext, "data/data_installed.txt").isFile()) return false;
+            if (!new File(c.getFilesDir(), "libgtav_game.so").isFile()) return false;
+            String shell = null;
+            for (String l : new String(Files.readAllBytes(new File(c.getFilesDir(), "pack/pack.txt").toPath()),
+                    StandardCharsets.UTF_8).split("\n")) {
+                if (l.startsWith("shell ")) shell = l.substring(6).trim();
+            }
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            md.update(Files.readAllBytes(new File(c.getApplicationInfo().nativeLibraryDir, "libgtav_fast.so").toPath()));
+            StringBuilder hex = new StringBuilder();
+            for (byte b : md.digest()) hex.append(String.format("%02x", b));
+            return hex.toString().equals(shell);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     /** Roda a build inteira (na thread do serviço). null = concluída. */
     static String run(Context c, String disc1, String disc2, String tu) {
         running = true;

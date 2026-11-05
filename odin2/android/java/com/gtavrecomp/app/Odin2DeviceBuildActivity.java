@@ -22,9 +22,10 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 /**
- * Gtavport (Fase 1): "Instalar e compilar neste aparelho". Escolha Disc 1, Disc 2 e o Title Update 27;
- * o app copia e confere os arquivos e recompila o jogo aqui mesmo (Odin2BuildService), sem PC e sem
- * pack. Pode sair da tela: a build continua (notificação). Interrompida, continua de onde parou.
+ * Gtavport (Fase 1): a tela de setup do app. Escolha Disc 1, Disc 2 e o Title Update 27; o app copia e
+ * confere os arquivos e recompila o jogo aqui mesmo (Odin2BuildService), sem PC, como os ports de
+ * BOTW/TOTK. Pode sair da tela: a build continua (notificação). Interrompida, continua de onde parou.
+ * Usar um pack feito no PC fica como opção avançada (a tela de setup do upstream).
  */
 public class Odin2DeviceBuildActivity extends Activity {
     private static final String[] LABELS = {"Disc 1 (Install)", "Disc 2 (Play)", "Title Update 27 (tu00000009_00000000)"};
@@ -51,8 +52,8 @@ public class Odin2DeviceBuildActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(pad, pad, pad, pad);
         box.setBackgroundColor(Color.rgb(16, 20, 24));
-        box.addView(text("Instalar e compilar neste aparelho", 22, Color.WHITE));
-        box.addView(text("Sem PC: escolha os seus Disc 1, Disc 2 e Title Update 27. O app copia e confere ~16 GB, "
+        box.addView(text("GTA V — instalar e compilar neste aparelho", 22, Color.WHITE));
+        box.addView(text("Tudo no aparelho, sem PC: escolha os seus Disc 1, Disc 2 e Title Update 27. O app copia e confere ~16 GB, "
                 + "recompila o código do jogo aqui (codegen + clang, vários minutos nos núcleos grandes) e o deixa "
                 + "pronto. Os shaders são traduzidos enquanto você joga: nos primeiros minutos alguns objetos aparecem "
                 + "com atraso. Precisa de ~25 GB livres durante a instalação. Deixe na tomada e com ventoinha ligada.", 14, Color.LTGRAY));
@@ -72,7 +73,7 @@ public class Odin2DeviceBuildActivity extends Activity {
             row.addView(pickedText[i]);
             box.addView(row);
         }
-        start = button("Instalar e compilar", v -> onStart());
+        start = button("Instalar e compilar", v -> onStartClicked());
         box.addView(start);
         bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         bar.setMax(1000);
@@ -88,6 +89,13 @@ public class Odin2DeviceBuildActivity extends Activity {
         log = text("", 11, Color.rgb(150, 160, 170));
         log.setTypeface(Typeface.MONOSPACE);
         box.addView(log);
+        box.addView(text("Avançado", 14, Color.GRAY));
+        box.addView(button("Usar um pack feito no PC (Build for Android)…", v -> {
+            startActivity(new Intent().setClassName(this, "com.gtavrecomp.app.SetupActivity")
+                    .putExtra("com.gtavrecomp.app.SETUP", true).putExtra("odin2_pc", true));
+        }));
+        box.addView(button("Driver gráfico…", v -> startActivity(new Intent(this, Odin2DriverActivity.class))));
+        box.addView(button("Logs de desempenho…", v -> startActivity(new Intent(this, Odin2PerfLogsActivity.class))));
         ScrollView sv = new ScrollView(this);
         sv.addView(box);
         setContentView(sv);
@@ -123,6 +131,9 @@ public class Odin2DeviceBuildActivity extends Activity {
         bar.setProgress((int) (Odin2DeviceBuild.progress * 1000));
         if (busy) {
             status.setText(Odin2DeviceBuild.stage);
+        } else if (!Odin2DeviceBuild.finished && Odin2DeviceBuild.installed(this)) {
+            status.setText("O jogo já está compilado neste aparelho para esta versão do app.");
+            play.setVisibility(View.VISIBLE);
         } else if (Odin2DeviceBuild.finished) {
             String e = Odin2DeviceBuild.error;
             status.setText(e == null ? "Pronto: o jogo foi compilado neste aparelho."
@@ -134,7 +145,7 @@ public class Odin2DeviceBuildActivity extends Activity {
         if (!l.equals(log.getText().toString())) log.setText(l);
     }
 
-    private void onStart() {
+    private void onStartClicked() {
         if (Odin2DeviceBuild.running) {
             Odin2DeviceBuild.cancelled.set(true);
             status.setText("Cancelando…");

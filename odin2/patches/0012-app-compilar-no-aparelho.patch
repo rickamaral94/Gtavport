@@ -1,25 +1,27 @@
 --- a/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
 +++ b/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
-@@ -184,6 +184,19 @@
-             + "your PC (Build for Android in the PC launcher, after setting the game up there), copy "
-             + "it and your disc images and title update to this phone (for example to Download), "
-             + "choose them below and press Install. About 16 GB is copied and checked.", 14));
-+        // Gtavport (Fase 1): everything on this device, no PC and no pack, when the APK has the tools.
-+        try {
-+            Class<?> dev = Class.forName("com.gtavrecomp.app.Odin2DeviceBuild");
-+            if ((boolean) dev.getDeclaredMethod("available", android.content.Context.class).invoke(null, this)) {
-+                Button device = new Button(this);
-+                device.setText("Install + build on this device (no PC)...");
-+                device.setOnClickListener(v -> startActivity(new Intent().setClassName(this, "com.gtavrecomp.app.Odin2DeviceBuildActivity")));
-+                box.addView(device);
-+                box.addView(text("Or, with a pack made by your PC (Build for Android):", 14));
+@@ -88,6 +88,21 @@
+             startGame();
+             return;
+         }
++        // Gtavport (Fase 1): this APK installs and builds the game on the device itself, no PC. Its
++        // setup is Odin2DeviceBuildActivity; this screen (a pack made by a PC) only on request
++        // ("odin2_pc", from that screen's advanced option).
++        if (getIntent() == null || !getIntent().getBooleanExtra("odin2_pc", false)) {
++            try {
++                Class<?> dev = Class.forName("com.gtavrecomp.app.Odin2DeviceBuild");
++                if ((boolean) dev.getDeclaredMethod("available", android.content.Context.class).invoke(null, this)) {
++                    startActivity(new Intent().setClassName(this, "com.gtavrecomp.app.Odin2DeviceBuildActivity"));
++                    finish();
++                    return;
++                }
++            } catch (Exception e) {
++                // APK do upstream: só o fluxo pelo PC
 +            }
-+        } catch (Exception e) {
-+            // APK do upstream: só o fluxo pelo PC
 +        }
          for (int i = 0; i < 4; i++) {
-             final int slot = i;
-             box.addView(text(LABELS[i], 15));
+             String s = prefs.getString("uri" + i, null);
+             if (s != null) picked[i] = Uri.parse(s);
 --- a/tools/android/app/AndroidManifest.xml
 +++ b/tools/android/app/AndroidManifest.xml
 @@ -12,6 +12,11 @@

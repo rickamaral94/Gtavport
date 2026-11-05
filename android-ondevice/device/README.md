@@ -1,6 +1,6 @@
 # Fase 1 — instalar e compilar o jogo no próprio aparelho (sem PC)
 
-Tela **Install + build on this device (no PC)** no setup do app → escolher Disc 1, Disc 2 e TU27 → **Instalar e compilar**.
+O app abre direto na tela **instalar e compilar neste aparelho** (como os ports de BOTW/TOTK) → escolher Disc 1, Disc 2 e TU27 → **Instalar e compilar** → **Jogar**. Usar um pack feito no PC fica como opção avançada no fim da tela.
 
 ## O que roda no aparelho
 | Etapa | Código | Ferramenta (nativeLibraryDir) |
