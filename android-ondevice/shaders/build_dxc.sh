@@ -1,21 +1,25 @@
 #!/bin/bash
-# DXC (DirectXShaderCompiler) para aarch64-android: libdxcompiler.so + dxc, a mesma versão que o
-# XenosRecomp do upstream usa (dxc-bin, v1.7.2403). Os binários "linux arm64" do dxc-bin são glibc e
-# não carregam no bionic, por isso a build cruzada (P4).
+# DXC (DirectXShaderCompiler) para aarch64-android: libdxcompiler.so + dxc, no MESMO commit dos
+# binários que o XenosRecomp do upstream usa (dxc-bin: "libdxcompiler.so: 1.8(dev;4662-416fab6b)"),
+# para gerar o mesmo SPIR-V que o PC. (O padrão "v1.7.2403" do build-macos.sh do dxc-bin não existe
+# como tag.) Os binários "linux arm64" do dxc-bin são glibc e não carregam no bionic: daí a build
+# cruzada (P4).
 #   android-ondevice/shaders/build_dxc.sh [JOBS]  -> work/dxc/out/{libdxcompiler.so,dxc}
 set -euo pipefail
 [ -f ~/android-tools/env.sh ] && source ~/android-tools/env.sh
 : "${ANDROID_NDK_HOME:?defina ANDROID_NDK_HOME (NDK r29)}"
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-VER=v1.7.2403
+VER=${DXC_COMMIT:-416fab6b}
 JOBS=${1:-3}
 W=$ROOT/work/dxc
 SRC=$W/DirectXShaderCompiler
 mkdir -p "$W"
 if [ ! -d "$SRC/.git" ]; then
-  git clone -q --depth 1 --branch "$VER" --recurse-submodules --shallow-submodules \
-    https://github.com/microsoft/DirectXShaderCompiler "$SRC"
+  git clone -q --filter=blob:none --no-checkout https://github.com/microsoft/DirectXShaderCompiler "$SRC"
 fi
+git -C "$SRC" checkout -q "$VER"
+git -C "$SRC" submodule update -q --init --recursive --depth 1 || git -C "$SRC" submodule update -q --init --recursive
+echo "DXC em $(git -C "$SRC" rev-parse HEAD) ($(git -C "$SRC" describe --tags 2>/dev/null || echo sem tag))"
 # 1) tablegen do host (a build cruzada executa llvm-tblgen/clang-tblgen aqui).
 if [ ! -x "$W/host/bin/clang-tblgen" ]; then
   cmake -S "$SRC" -B "$W/host" -G Ninja -C "$SRC/cmake/caches/PredefinedParams.cmake" \

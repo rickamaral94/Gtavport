@@ -66,11 +66,13 @@ def check_blob(name: str, data: bytes, findings: list[str], depth: int = 0) -> N
     for rx, why in NAME_RULES:
         if rx.search(name):
             findings.append(f"{name}: {why}")
-    if len(data) > MAX_BYTES and not LARGE_OK.search(name):
+    is_archive = name.lower().endswith((".zip", ".apk", ".jar", ".aab")) and data[:2] == b"PK"
+    # Pacotes: o tamanho do contêiner não diz nada; cada entrada é verificada abaixo.
+    if len(data) > MAX_BYTES and not LARGE_OK.search(name) and not is_archive:
         findings.append(f"{name}: {len(data) >> 20} MB (grande demais para fonte; explicar ou remover)")
     for why in magic_findings(name, data[:0x400], data):
         findings.append(f"{name}: {why}")
-    if depth < 3 and name.lower().endswith((".zip", ".apk", ".jar", ".aab")) and data[:2] == b"PK":
+    if depth < 3 and is_archive:
         try:
             with zipfile.ZipFile(io.BytesIO(data)) as z:
                 for info in z.infolist():

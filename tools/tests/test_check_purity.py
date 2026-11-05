@@ -60,6 +60,12 @@ class Purity(unittest.TestCase):
         self.assertEqual(run("lib/arm64-v8a/libclang.so", big), [])
         self.assertTrue(run("blob.bin", big))
 
+    def test_large_archive_checked_by_entries(self):
+        apk = zipped({"lib/arm64-v8a/libclang.so": b"\0" * (C.MAX_BYTES + 1)})
+        self.assertEqual(run("probe.apk", apk), [])
+        apk = zipped({"assets/big.bin": b"\0" * (C.MAX_BYTES + 1)})
+        self.assertTrue(any("big.bin" in f for f in run("probe.apk", apk)))
+
 
 if __name__ == "__main__":
     unittest.main()
