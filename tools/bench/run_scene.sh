@@ -51,7 +51,12 @@ done
 DIAG=(--gtav_native_stats=true --gtav_native_pass_gpu_times=true --gtav_wait_profile=true)
 "$ROOT/upstream/tools/android/set_args.sh" "${DIAG[@]}" "$@" >/dev/null
 if [ "${COLD_CACHE:-0}" = 1 ]; then
-  sh "rm -rf $D/pipeline_cache* $D/cache/pipeline* 2>/dev/null"; echo "cache de pipeline apagado" >> "$OUT/meta.txt"
+  # Só o cache Vulkan do driver da vez (patch 0003). shader_cache/pipelines.bin (lista de shaders
+  # do aquecimento do upstream) e o SPIR-V ficam: "frio" aqui = pipelines do driver recompilados.
+  drv_req=system
+  for a in "$@"; do case $a in env:ODIN2_VK_DRIVER=*) drv_req=${a#env:ODIN2_VK_DRIVER=};; esac; done
+  f=vk_pipelines.bin; [ "$drv_req" = system ] || f="vk_pipelines.$(echo "$drv_req" | sed 's/[^A-Za-z0-9.-]/_/g').bin"
+  sh "rm -f $D/shader_cache/$f"; echo "cache_apagado=shader_cache/$f" >> "$OUT/meta.txt"
 fi
 
 sh am force-stop $PKG; adb logcat -c
@@ -88,4 +93,8 @@ sh am force-stop $PKG
 adb pull "$D/logs/gtav.log" "$OUT/raw/gtav.log" >/dev/null 2>&1 || echo "gtav.log indisponível" >> "$OUT/meta.txt"
 adb logcat -d > "$OUT/raw/logcat.txt"
 grep -E "F DEBUG|F libc" "$OUT/raw/logcat.txt" | head -5 | sed 's/^/crash_log=/' >> "$OUT/meta.txt"
+# Driver efetivo (odin2/driver): o que realmente carregou, não o pedido. APK do upstream: system.
+drv=$(grep -o "Odin2Driver.*driver: [^ ]*" "$OUT/raw/logcat.txt" | tail -1 | sed 's/.*driver: //')
+echo "driver_effective=${drv:-system (sem libodin2driver)}" >> "$OUT/meta.txt"
+grep -q "adrenotools falhou\|não instalado" "$OUT/raw/logcat.txt" && echo "driver_error=$(grep -m1 'Odin2Driver.*\(falhou\|não instalado\)' "$OUT/raw/logcat.txt")" >> "$OUT/meta.txt"
 python3 "$ROOT/tools/bench/summarize.py" "$OUT"

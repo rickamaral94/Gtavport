@@ -1,0 +1,56 @@
+--- a/src/ui/vulkan/vulkan_instance.cpp
++++ b/src/ui/vulkan/vulkan_instance.cpp
+@@ -16,6 +16,9 @@
+ #include <vector>
+ 
+ #include <rex/cvar.h>
++#if REX_PLATFORM_ANDROID
++#include <dlfcn.h>
++#endif
+ #include <rex/filesystem.h>
+ #include <rex/logging.h>
+ #include <rex/platform.h>
+@@ -81,18 +84,41 @@
+     return nullptr;
+   }
+ #else
+-  loader_loaded = vulkan_instance->loader_.Load(platform::lib_names::kVulkanLoader);
++  // Gtavport (odin2/driver): driver Vulkan escolhido via adrenotools, o mesmo handle que o plume
++  // usa. Sem libodin2driver.so no APK, ou com o driver do sistema escolhido, nada muda.
++  void* odin2_vulkan = nullptr;
++#if REX_PLATFORM_ANDROID
++  if (void* odin2 = dlopen("libodin2driver.so", RTLD_NOW)) {
++    if (auto open = reinterpret_cast<void* (*)()>(dlsym(odin2, "odin2_vulkan_open"))) {
++      odin2_vulkan = open();
++    }
++  }
++#endif
++  if (odin2_vulkan) {
++    loader_loaded = true;
++    REXLOG_INFO("Vulkan: driver customizado via libodin2driver.so");
++  } else {
++    loader_loaded = vulkan_instance->loader_.Load(platform::lib_names::kVulkanLoader);
++  }
+   if (!loader_loaded) {
+     REXLOG_ERROR("Failed to load {}", platform::lib_names::kVulkanLoader);
+     return nullptr;
+   }
+ #endif
+ 
++#if !REX_PLATFORM_MAC
++#define XE_VULKAN_LOADER_SYMBOL(name)                                          \
++  (odin2_vulkan ? reinterpret_cast<PFN_##name>(dlsym(odin2_vulkan, #name)) \
++                : vulkan_instance->loader_.GetSymbol<PFN_##name>(#name))
++#else
++#define XE_VULKAN_LOADER_SYMBOL(name) vulkan_instance->loader_.GetSymbol<PFN_##name>(#name)
++#endif
+ #define XE_VULKAN_LOAD_LOADER_FUNCTION(name) \
+-  functions_loaded &= (ifn.name = vulkan_instance->loader_.GetSymbol<PFN_##name>(#name)) != nullptr;
++  functions_loaded &= (ifn.name = XE_VULKAN_LOADER_SYMBOL(name)) != nullptr;
+   XE_VULKAN_LOAD_LOADER_FUNCTION(vkGetInstanceProcAddr);
+   XE_VULKAN_LOAD_LOADER_FUNCTION(vkDestroyInstance);
+ #undef XE_VULKAN_LOAD_LOADER_FUNCTION
++#undef XE_VULKAN_LOADER_SYMBOL
+   if (!functions_loaded) {
+     REXLOG_ERROR("Failed to get Vulkan loader function pointers");
+     return nullptr;

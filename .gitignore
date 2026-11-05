@@ -1,16 +1,16 @@
 # Nunca versionar nada derivado do jogo
+*.ipa
 *.iso
+*.rpf
 *.xex
 *.xexp
-*.rpf
-tu0000*
+*gtav_game*
+__pycache__/
+bench/results/*/raw/
+build/
 data/
+gtav-android-pack*.zip
 shader_cache/
 spirv/
-*gtav_game*
-gtav-android-pack*.zip
-*.ipa
-build/
+tu0000*
 work/
-bench/results/*/raw/
-__pycache__/

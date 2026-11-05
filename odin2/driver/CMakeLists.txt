@@ -1,0 +1,13 @@
+# libodin2driver.so + hooks do libadrenotools (todos vão para lib/arm64-v8a do APK).
+cmake_minimum_required(VERSION 3.14)
+project(odin2driver LANGUAGES C CXX)
+set(CMAKE_CXX_STANDARD 17)
+if(NOT ADRENOTOOLS_DIR)
+  message(FATAL_ERROR "defina -DADRENOTOOLS_DIR=<work/deps/libadrenotools> (tools/prepare.sh)")
+endif()
+set(BUILD_SHARED_LIBS OFF)
+add_subdirectory(${ADRENOTOOLS_DIR} adrenotools)
+add_library(odin2driver SHARED odin2_driver.cpp)
+target_link_libraries(odin2driver PRIVATE adrenotools log dl)
+set_target_properties(odin2driver PROPERTIES CXX_VISIBILITY_PRESET hidden)
+target_link_options(odin2driver PRIVATE "-Wl,--exclude-libs,ALL" "-Wl,-z,max-page-size=16384" "-static-libstdc++")

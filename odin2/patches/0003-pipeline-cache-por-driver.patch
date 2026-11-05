@@ -1,0 +1,36 @@
+--- a/gtav/src/native/renderer.cpp
++++ b/gtav/src/native/renderer.cpp
+@@ -27,6 +27,7 @@
+ #include <algorithm>
+ #include <atomic>
+ #include <cstdio>
++#include <cctype>
+ #include <cstdlib>
+ #include <chrono>
+ #include <condition_variable>
+@@ -39,6 +40,7 @@
+ #include <memory>
+ #include <mutex>
+ #include <string>
++#include <string_view>
+ #include <thread>
+ #include <vector>
+ #if defined(__APPLE__)
+@@ -687,7 +689,16 @@
+ 
+   // Vulkan pipeline cache, persisted next to the exe so pipelines compiled once load in about a
+   // millisecond on later runs. Saved periodically (the game exits without unwinding).
+-  std::filesystem::path PipelineCachePath() { return ExeDir() / "shader_cache" / "vk_pipelines.bin"; }
++  // Gtavport: um arquivo por driver (ODIN2_VK_DRIVER), para a matriz A/B/BA de drivers não
++  // invalidar o cache um do outro. Driver do sistema: o nome original.
++  std::filesystem::path PipelineCachePath() {
++    const char* driver = std::getenv("ODIN2_VK_DRIVER");
++    if (!driver || !*driver || std::string_view(driver) == "system")
++      return ExeDir() / "shader_cache" / "vk_pipelines.bin";
++    std::string safe;
++    for (const char* p = driver; *p; ++p) safe += std::isalnum(static_cast<unsigned char>(*p)) || *p == '.' || *p == '-' ? *p : '_';
++    return ExeDir() / "shader_cache" / ("vk_pipelines." + safe + ".bin");
++  }
+ 
+   void LoadPipelineCache() {
+     std::vector<uint8_t> data;

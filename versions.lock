@@ -4,6 +4,7 @@ gtav-recomp       https://github.com/andrewnakas/gtav-recomp       2a76184f563e4
 rexglue-sdk       https://github.com/rexglue/rexglue-sdk           f5337cd
 plume             https://github.com/renderbag/plume               0ce184b
 XenosRecomp       https://github.com/hedge-dev/XenosRecomp         990d03b
+libadrenotools    https://github.com/bylaws/libadrenotools         8fae8ce254dfc1344527e05301e43f37dea2df80
 llvm              https://github.com/llvm/llvm-project             llvmorg-19.1.5
 ndk               android-ndk                                      r29
-android-platform  android                                          35
+android-platform  android                                          36 (build-tools 36.0.0, igual ao upstream)

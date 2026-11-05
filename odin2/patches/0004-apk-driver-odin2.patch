@@ -1,0 +1,40 @@
+--- a/tools/android/app/java/com/gtavrecomp/app/GameActivity.java
++++ b/tools/android/app/java/com/gtavrecomp/app/GameActivity.java
+@@ -51,6 +51,16 @@
+                 Log.w(TAG, "args.txt env: " + e);
+             }
+         }
++        // Gtavport (odin2/android): driver Vulkan escolhido (env:ODIN2_VK_DRIVER), antes de as
++        // bibliotecas nativas carregarem. A classe só existe no APK do Gtavport.
++        try {
++            Class.forName("com.gtavrecomp.app.Odin2Driver").getDeclaredMethod("configure", android.content.Context.class)
++                .invoke(null, this);
++        } catch (ClassNotFoundException e) {
++            // APK do upstream: driver do sistema
++        } catch (Exception e) {
++            Log.w(TAG, "Odin2Driver: " + e);
++        }
+         super.onCreate(savedInstanceState);
+         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+     }
+--- a/tools/android/build_apk.sh
++++ b/tools/android/build_apk.sh
+@@ -21,8 +21,9 @@
+ cd "$OUT"
+ rm -rf classes stage && mkdir -p classes stage/lib/arm64-v8a
+ 
++# Gtavport: ODIN2_JAVA = pastas de Java extras, ODIN2_LIBS = pasta com .so extras (odin2/driver).
+ javac --release 17 -nowarn -classpath "$JAR" -d classes \
+-  $(find "$SDL_JAVA" "$APP/java" -name '*.java') 2>&1 | grep -v "^Note:" || true
++  $(find "$SDL_JAVA" "$APP/java" ${ODIN2_JAVA:-} -name '*.java') 2>&1 | grep -v "^Note:" || true
+ "$BT/d8" --release --min-api 30 --lib "$JAR" --output stage $(find classes -name '*.class')
+ 
+ MANIFEST=$APP/AndroidManifest.xml
+@@ -41,6 +42,7 @@
+ 
+ cp "${LIBS[@]}" "$SDK_LIB/librexruntime.so" "$SDK_LIB/librexgpu-xenos.so" \
+    "$NDK_LIBCXX" stage/lib/arm64-v8a/
++if [ -n "${ODIN2_LIBS:-}" ]; then cp "$ODIN2_LIBS"/*.so stage/lib/arm64-v8a/; fi
+ "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug stage/lib/arm64-v8a/*.so
+ cp base.apk unaligned.apk
+ (cd stage && zip -q -X ../unaligned.apk classes.dex && zip -q -X -0 -r ../unaligned.apk lib)

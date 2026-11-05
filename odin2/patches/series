@@ -1,3 +1,7 @@
 # Série de patches do Gtavport, aplicada em ordem sobre a árvore preparada.
 # Formato: <alvo> <arquivo>   alvo = gtav | rexglue-sdk | plume | XenosRecomp
 # Faixas: 00xx infraestrutura/driver · 02xx corretude · 03xx GPU · 04xx CPU/térmica · 05xx extras
+rexglue-sdk 0001-rexglue-vulkan-driver-odin2.patch
+plume       0002-plume-vulkan-driver-odin2.patch
+gtav        0003-pipeline-cache-por-driver.patch
+gtav        0004-apk-driver-odin2.patch

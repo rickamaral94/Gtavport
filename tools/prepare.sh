@@ -23,7 +23,7 @@ fetch_dep() {  # nome -> work/deps/<nome> limpo no pin
   git -C "$d" clean -qfdx
 }
 [ "${KEEP_DEPS:-0}" = 1 ] || rm -rf "$W/deps"
-for n in rexglue-sdk plume XenosRecomp; do fetch_dep "$n"; done
+for n in rexglue-sdk plume XenosRecomp libadrenotools; do fetch_dep "$n"; done
 
 rm -rf "$W/gtav"
 git -C "$ROOT/upstream" archive --format=tar --prefix=gtav/ HEAD | tar -C "$W" -x

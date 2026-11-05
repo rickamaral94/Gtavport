@@ -1,0 +1,38 @@
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -13,6 +13,9 @@
+ #include <algorithm>
+ #include <chrono>
+ #include <cmath>
++#if defined(__ANDROID__)
++#   include <dlfcn.h>  // Gtavport: odin2/driver
++#endif
+ #if defined(__APPLE__)
+ #   include <TargetConditionals.h>
+ #   if TARGET_OS_IPHONE
+@@ -4873,6 +4876,25 @@
+                 }
+             }
+         }
++#elif defined(__ANDROID__)
++        // Gtavport (odin2/driver): mesmo driver que o runtime do ReXGlue abriu via adrenotools.
++        // Sem libodin2driver.so, ou com o driver do sistema, segue o caminho normal do volk.
++        VkResult res = VK_ERROR_INITIALIZATION_FAILED;
++        {
++            void *odin2Vulkan = nullptr;
++            if (void *odin2 = dlopen("libodin2driver.so", RTLD_NOW)) {
++                if (auto open = reinterpret_cast<void *(*)()>(dlsym(odin2, "odin2_vulkan_open"))) {
++                    odin2Vulkan = open();
++                }
++            }
++            auto gipa = odin2Vulkan ? reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(odin2Vulkan, "vkGetInstanceProcAddr")) : nullptr;
++            if (gipa) {
++                volkInitializeCustom(gipa);
++                res = VK_SUCCESS;
++            } else {
++                res = volkInitialize();
++            }
++        }
+ #else
+         VkResult res = volkInitialize();
+ #endif
