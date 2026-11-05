@@ -64,6 +64,7 @@ final class Odin2Driver {
             Log.e(TAG, "importação via adb falhou: " + e);
         }
         Odin2DriverActivity.addShortcut(c);
+        Odin2PerfLogsActivity.addShortcut(c);
         File status = statusFile(c);
         status.getParentFile().mkdirs();
         setenv("ODIN2_VK_STATUS_FILE", status.getAbsolutePath());

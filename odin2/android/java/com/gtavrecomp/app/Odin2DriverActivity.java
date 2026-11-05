@@ -78,6 +78,10 @@ public class Odin2DriverActivity extends Activity {
         imp.setText("Importar pacote de driver (.zip)…");
         imp.setOnClickListener(v -> pickZip());
         box.addView(imp);
+        Button logs = new Button(this);
+        logs.setText("Logs de desempenho…");
+        logs.setOnClickListener(v -> startActivity(new Intent(this, Odin2PerfLogsActivity.class)));
+        box.addView(logs);
         Button play = new Button(this);
         play.setText("Iniciar o jogo");
         play.setOnClickListener(v -> {

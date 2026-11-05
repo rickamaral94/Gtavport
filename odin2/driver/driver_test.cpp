@@ -38,6 +38,8 @@ std::string Ver(uint32_t v) {
 
 std::string Error(const std::string& msg) { return "{\"ok\":false,\"error\":\"" + Esc(msg.c_str()) + "\"}"; }
 
+std::string Describe(void* h);
+
 std::string Test(const std::string& dir, const std::string& lib, const std::string& hooks, const std::string& tmp) {
   void* h = nullptr;
   if (dir.empty()) {
@@ -47,6 +49,11 @@ std::string Test(const std::string& dir, const std::string& lib, const std::stri
                                    hooks.c_str(), dir.c_str(), lib.c_str(), nullptr, nullptr);
   }
   if (!h) return Error(std::string("não carregou: ") + (dlerror() ? dlerror() : "adrenotools"));
+  return Describe(h);
+}
+
+// Instância Vulkan pelo handle `h` (driver já carregado) e o que o jogo vai encontrar.
+std::string Describe(void* h) {
   auto gipa = reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(h, "vkGetInstanceProcAddr"));
   if (!gipa) return Error("sem vkGetInstanceProcAddr");
   auto create = reinterpret_cast<PFN_vkCreateInstance>(gipa(nullptr, "vkCreateInstance"));
@@ -114,6 +121,21 @@ std::string Test(const std::string& dir, const std::string& lib, const std::stri
 }
 
 }  // namespace
+
+// Para o jogo (odin2/perf): o driver em uso neste processo (o mesmo handle de odin2_vulkan_open, ou o
+// carregador do sistema), em JSON. Calculado uma vez; chamar fora da thread de render.
+extern "C" void* odin2_vulkan_open(void);
+extern "C" __attribute__((visibility("default"))) const char* odin2_vulkan_describe(void) {
+  static std::string cached;
+  static bool done = false;
+  if (!done) {
+    void* h = odin2_vulkan_open();
+    if (!h) h = dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL);
+    cached = h ? Describe(h) : Error("libvulkan.so não carregou");
+    done = true;
+  }
+  return cached.c_str();
+}
 
 extern "C" JNIEXPORT jstring JNICALL Java_com_gtavrecomp_app_Odin2DriverTestActivity_nativeTest(
     JNIEnv* env, jclass, jstring dir, jstring lib, jstring hooks, jstring tmp) {

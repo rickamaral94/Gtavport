@@ -1,0 +1,27 @@
+--- a/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
++++ b/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
+@@ -210,6 +210,10 @@
+             driver.setText("Graphics driver (Turnip / system)...");
+             driver.setOnClickListener(v -> startActivity(new Intent().setClassName(this, "com.gtavrecomp.app.Odin2DriverActivity")));
+             box.addView(driver);
++            Button perf = new Button(this);
++            perf.setText("Performance logs...");
++            perf.setOnClickListener(v -> startActivity(new Intent().setClassName(this, "com.gtavrecomp.app.Odin2PerfLogsActivity")));
++            box.addView(perf);
+         } catch (ClassNotFoundException e) {
+             // APK do upstream: sem seletor de driver
+         }
+--- a/tools/android/app/AndroidManifest.xml
++++ b/tools/android/app/AndroidManifest.xml
+@@ -51,5 +51,11 @@
+             android:exported="false"
+             android:process=":drivertest"
+             android:configChanges="orientation|screenSize|keyboardHidden" />
++        <!-- Gtavport (odin2/perf): sessões gravadas na seção Performance do jogo. -->
++        <activity
++            android:name="com.gtavrecomp.app.Odin2PerfLogsActivity"
++            android:exported="true"
++            android:label="Logs de desempenho"
++            android:configChanges="orientation|screenSize|keyboardHidden" />
+     </application>
+ </manifest>

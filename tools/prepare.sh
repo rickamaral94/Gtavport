@@ -59,6 +59,7 @@ grep -v '^\s*#' "$ROOT/odin2/patches/series" | while read -r tgt p; do
 done
 # Código do Gtavport que os patches incluem (odin2/post -> work/gtav/odin2_post).
 cp -r "$ROOT/odin2/post" "$W/gtav/odin2_post"
+cp -r "$ROOT/odin2/perf" "$W/gtav/odin2_perf"
 if [ -d "$KEPT" ]; then
   [ -d "$KEPT/sdk-out" ] && mv "$KEPT/sdk-out" "$W/gtav/rexglue-sdk/out"
   [ -d "$KEPT/build" ] && mv "$KEPT/build" "$W/gtav/build"
