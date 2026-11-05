@@ -1,151 +1,125 @@
-# Plano — Caminho A (Xbox 360 TU27 → Odin 2 Portal Pro)
+# Plano — Caminho A (Xbox 360 TU27 → Odin 2 Portal Pro) — v2
 
-Status: **proposta para avaliação**. Caminho A aprovado em 2026-11-05; Caminho B congelado.
-Base: `andrewnakas/gtav-recomp` @ `2a76184`. Cada fase abaixo tem objetivo, arquivos, riscos e métrica;
-nenhuma começa sem o seu OK explícito naquela fase.
+Status: **v2 para avaliação**. Caminho A aprovado em 2026-11-05; Caminho B congelado.
+Base: `andrewnakas/gtav-recomp` @ `2a76184` (main). Branch `issue-fixes` @ `9fdbbdc` acompanhado (ver Política de FPS e Fase 2).
+Nenhuma etapa começa sem OK explícito. **Prazos não são compromisso até o portão G1** (fim das provas de viabilidade).
 
-## 0. Ajustes que proponho ao roteiro original
+## Mudanças da v1 → v2
 
-Depois de ler o upstream, três mudanças de ordem/escopo:
+| # | v1 | v2 | Motivo |
+|---|---|---|---|
+| 1 | adrenotools antes do baseline | **baseline do upstream intacto primeiro**, depois adrenotools e repetição com o driver do sistema | detecta regressão da própria integração |
+| 2 | Fase 1A com prazo, `-j4`, < 40 min | **provas de viabilidade (P1–P5) antes**; `-j` e tempo derivados de medição | os ~1,5 GB/job do `build_llvm.sh` são da build do próprio LLVM, não dos `.cpp` do jogo — erro meu na v1 |
+| 3 | shaders depois de 1A | **prova de shader em paralelo, desde o início** | maior risco do plano |
+| 4 | "traduzir todos os shaders na instalação" por varredura | **captura dos shaders criados → tradução local → cache persistente → faltantes**; varredura vira melhoria opcional | ainda não sabemos localizar/extrair todos dos arquivos; segundo o mantenedor (issue #7), quase todos os ~3.600 são criados no carregamento do modo história |
+| 5 | glslang como plano B do DXC | **não é substituto**; só com validação de compatibilidade shader a shader | semântica HLSL diferente |
+| 6 | "física quebra acima de 30 fps" | problema relatado é **principalmente condução**; upstream já tem 30 fps em veículos (`fab5c28`); demais sistemas não validados | conclusão era forte demais |
+| 7 | CPU (Fase 4) depois de GPU (Fase 3) | **duas trilhas ordenadas pelo gargalo medido** | o próprio upstream aponta gravação de comandos na CPU |
+| 8 | ~9 ms de overhead de passes como previsão | **pista**, medida em M1/MoltenVK | outra GPU, outro driver |
+| 9 | LSE = atomics corretos | **validar semântica** `lwarx/stwcx.` e `ldarx/stdcx.` | flag de compilação não prova semântica |
+| 10 | toolchain no APK ou separada | **no APK** na 1ª versão | arquivo extraído em diretório gravável não pode ser `execve()` |
+| 11 | "teto de 6 h do dataSync no Android 14+" | vale para apps com **targetSdk 35+** nas condições documentadas; tratar `Service.onTimeout()` | correção factual |
+| 12 | metas fixas (−25 % GPU, < 40 min, sem stutter > 50 ms) | **metas provisórias**, revistas após o baseline | ainda não medidas |
 
-1. **adrenotools vem antes do baseline (Fase 0.5).** O APK upstream não carrega driver customizado; sem isso a matriz
-   sistema × Mr. Purple × Amaral-Adreno-Tools da Fase 0 não existe. É um patch pequeno e isolado.
-2. **Fase 2 encolhe.** O upstream já compila com `armv8.2-a+lse`, já tem byteswap NEON em massa nos vértices e já faz downmix
-   para estéreo. Vira validação + o bug do canal central, não reescrita.
-3. **Fase 1 é dividida em 1A (código) e 1B (shaders).** O código já tem caminho pronto (`build_llvm.sh`); os shaders
-   não têm (falta XenosRecomp + dxc em Android). Separar permite entregar 1A mesmo se 1B atrasar.
-
-Ponto de atenção que muda a Fase 4/5: **a física quebra acima de 30 fps** (upstream #12). Proponho que o "60 fps" venha
-de frame generation (lsfg-vk, 30→60) e não de destravar o jogo, até provarmos 40 fps seguro.
-
-## Estrutura do repositório
+## Estrutura do repositório (sem mudança de conceito)
 
 ```
-Gtavport/
-  upstream/            submódulo pinado no gtav-recomp (nunca editado à mão)
-  odin2/patches/       série de patches sobre upstream (quilt-style, numerados, 1 assunto cada)
-  odin2/               código novo nosso: adrenotools, ADPF/térmica, Swappy, configurações, controles
-  android-ondevice/    pipeline de compilação no aparelho (serviço, checkpoints, toolchain)
-  tools/               scripts: aplicar patches, rebase semanal, build do APK, verificação de pureza
-  docs/                decisões, baseline, relatórios A/B do ADL
+upstream/            submódulo pinado (nunca editado à mão)
+odin2/patches/       série numerada sobre upstream, 1 assunto por patch
+odin2/               código novo: driver, perf, settings, controles
+android-ondevice/    compilação e shaders no aparelho
+tools/               apply_patches.sh, rebase semanal, build reproduzível, bench
+docs/
 ```
-Rebase semanal: avançar o submódulo, reaplicar a série, rodar build + verificação; conflito vira item no relatório semanal.
-
-**CI (GitHub Actions)**: build do APK *shell*, verificação de pureza estrutural (sem `.so` de jogo, sem SPIR-V, sem
-`expected` de conteúdo além dos hashes já públicos do upstream, limite de tamanho por lib) e licenças. **Limite honesto:** a
-taint scan completa do upstream compara byte a byte contra o código gerado do jogo, então só roda numa máquina que tem os
-discos — fica como passo obrigatório de release local, não no CI.
+Requisitos para essa estrutura funcionar:
+- `tools/apply_patches.sh` idempotente (aplica a série sobre um submódulo limpo; falha alto em conflito).
+- Versões fixadas: commit do upstream e de rexglue-sdk/XenosRecomp/plume/SDL, NDK (r29), LLVM 19.1.5, DXC (tag), Turnip (tags).
+- Build reproduzível em container (Dockerfile com toolchain pinada); o hash do APK shell é registrado por release.
+- CI: build do shell + verificação estrutural de pureza + licenças. A taint scan completa continua como passo **local** de release (precisa dos discos).
 
 ---
 
-## Fase 0 — Baseline (sem alterar código)
-- **Objetivo:** números de referência do upstream intocado no Odin 2 e gargalo dominante.
-- **Arquivos:** só `docs/baseline.md` (protocolo já escrito).
-- **Execução:** depende de você ou de uma sessão com o aparelho via adb. Eu preparo um script `tools/bench/run_scene.sh`
-  (captura 120 s, `dumpsys gfxinfo`/Perfetto, temperaturas de `/sys/class/thermal`, clocks) — isso é ferramenta, não altera o jogo.
-- **Risco:** o Odin 2 tem ventoinha; resultados frios vs. quentes divergem menos que no S23 — bom, mas registrar perfil da ventoinha.
-- **Métrica de pronto:** 5 cenas × driver do sistema × 3 execuções preenchidas + perfil `simpleperf` de uma cena dizendo CPU/GPU/shader/térmico.
-- **Estimativa:** 1–2 dias de aparelho.
+## Etapa 0 — Baseline do upstream intacto
+- **Objetivo:** números do upstream sem qualquer patch, **driver do sistema**, no Odin 2.
+- **Build:** fluxo oficial do PC (Build for Android), um pack único; commit e versão do pack registrados.
+- **Protocolo:** `docs/baseline.md` (revisado nesta v2): cache frio / aquecido / sessão sustentada (30 min), tempos internos de CPU e GPU do renderer (`--gtav_wait_profile`, timestamps de GPU), telemetria indisponível registrada como tal, ventoinha e modo de desempenho fixos.
+- **Entregável:** tabela + gargalo dominante **com evidência de perfil**. É ela que ordena as trilhas de CPU e GPU.
 
-## Fase 0.5 — Troca de driver via adrenotools
-- **Objetivo:** escolher driver no APK (sistema / Turnip X / Turnip Y) para completar a matriz da Fase 0.
-- **Arquivos:** `odin2/driver/` (integração libadrenotools, como LibertyRecompAndroid), patch no ponto onde o SDK carrega
-  `libvulkan` (`odin2/patches/0001-vulkan-loader-hook.patch`), seletor no `SetupActivity`.
-- **Riscos:** o código de contorno do driver proprietário (lowering de int64, waits em fatias, rect lists na CPU) pode
-  ser desnecessário ou até prejudicial no Turnip — manter por cvar e medir. Bugs de Turnip vão para o repositório do driver.
-- **Métrica:** os 3 drivers iniciam e completam a cena 1; matriz da Fase 0 completa.
-- **Estimativa:** 3–5 dias.
+## Etapa 0.5 — adrenotools
+- **Objetivo:** trocar o driver no APK, sem regredir.
+- **Arquivos:** `odin2/driver/`, `odin2/patches/0001-vulkan-loader-adrenotools.patch`, seletor no SetupActivity.
+- **Sequência de validação:**
+  1. APK com adrenotools **usando o driver do sistema** → comparar com a Etapa 0. Diferença acima do ruído (definido pela variação das 3 execuções da Etapa 0) = regressão a corrigir antes de seguir.
+  2. Matriz sistema / Turnip Mr. Purple / Turnip Amaral-Adreno-Tools em ordem **A/B/BA** (cada driver medido antes e depois dos outros), **cache de pipeline separado por driver e versão**.
+- Contornos do driver proprietário que o upstream fez (lowering de int64, waits em fatias, rect lists na CPU) continuam ligados por cvar. Desligar algum só com A/B por driver.
 
-## Fase 1A — Compilar o código do jogo no aparelho
-- **Objetivo:** o usuário escolhe Disc 1 + Disc 2 + TU27 no Odin 2 e sai com `libgtav_game.so` sem PC.
-- **O que embarcar no APK** (em `lib/arm64-v8a/`, único local executável):
-  `libclang.so` e `libld.lld.so` (LLVM 19.1.5, de `build_llvm.sh`), `librexcodegen.so` (codegen do ReXGlue cross-compilado),
-  stubs de link de `android/link/`. Sem sysroot do NDK: o upstream já compila *freestanding*.
-- **Fluxo:** SAF → extração XISO/STFS → SHA-256 dos arquivos (`expected.txt` existente) → codegen (811 `.cpp`) → **hash de
-  cada `.cpp` contra a referência** → compilação paralela → link `-z now` → `getFilesDir()/game/libgtav_game.so` → `dlopen`.
-- **Arquivos:** `android-ondevice/service/` (Foreground Service tipo `dataSync`, notificação com progresso, WakeLock parcial),
-  `android-ondevice/jobs/` (fila com checkpoint por arquivo: `.o` + hash da entrada; retomar pula os prontos),
-  patch no `SetupActivity`/`android_setup_jni.cpp` para o novo modo "Compilar aqui".
-- **Agendamento:** jobs fixados nos núcleos grandes (X3 + 4 gold), `-j` decidido por RAM livre (~1–1,5 GB/job);
-  começar `-j4`; unidades acima de um limiar de tamanho em `-O2`, demais iguais ao upstream (para manter hashes de saída comparáveis com o PC).
-- **Riscos:**
-  - OOM/LMK matando o serviço → limitar jobs por `ActivityManager.MemoryInfo`, checkpoint resolve o retrabalho.
-  - Android 14+ restringe Foreground Service de longa duração (`dataSync` tem teto de 6 h/dia) — suficiente, mas registrar.
-  - Tamanho do APK sobe ~150–250 MB (clang+lld+codegen). Alternativa: baixar a toolchain como pacote separado assinado — decidir com você.
-  - Térmica: compilação de 30+ min a 100 % — mostrar temperatura e permitir pausar.
-- **Métrica:** build completo < 40 min no Odin 2 com ventoinha; `libgtav_game.so` funcionalmente idêntico ao do PC
-  (mesmo hash de todos os `.cpp`, jogo inicia a cena 1); retomar após `kill` sem recomeçar.
-- **Estimativa:** 2–3 semanas.
+## Etapa P — Provas de viabilidade (em paralelo com 0/0.5)
+Sem serviço, interface ou checkpoints, só a demonstração mínima no Odin 2. Cada prova tem saída binária: passou ou não passou, com números.
 
-## Fase 1B — Shaders no aparelho
-- **Objetivo:** acabar com o round-trip de `shader_cache` pelo PC (resolve também upstream #7).
-- **Proposta:** portar XenosRecomp + dxc para arm64-android e usar dois mecanismos:
-  1. **Na instalação:** varrer os arquivos de shader do próprio jogo do usuário e traduzir tudo para SPIR-V em lote
-     (com `adreno_shader_fix`, `lower_int64`, `ubo_constants` já existentes em C++/Python → portar os de Python para C++).
-  2. **Em jogo:** tradução sob demanda de qualquer shader faltante, em thread de baixa prioridade, gravando no cache — igual ao desktop.
-- **Arquivos:** `android-ondevice/shaders/` (build do dxc e XenosRecomp com o NDK, CLI único `libshadertool.so`), patch no renderer para
-  chamar o tradutor local quando o SPIR-V não existe.
-- **Riscos:** dxc é grande (~40–60 MB) e sua build para Android não é oficial; plano B é traduzir HLSL→SPIR-V com glslang (menos fiel — só se dxc falhar).
-  Se a varredura completa não cobrir variantes geradas em tempo de execução, o item 2 cobre.
-- **Métrica:** zero objetos faltando nas 5 cenas num aparelho que nunca viu o PC; tempo de tradução em lote informado (meta: < 15 min).
-- **Estimativa:** 2–4 semanas (maior incerteza do plano).
-
-## Fase 2 — Corretude ARM64 (escopo reduzido)
-- **Objetivo:** validar o que o upstream já fez e corrigir o que falta.
-- **Itens:** auditoria de `lwarx/stwcx.` → LSE (teste de estresse multi-thread no aparelho); conferir que o caminho NEON de byteswap cobre índices
-  e não só vértices; mover byteswap/destiling de texturas para compute onde o perfil mostrar custo; **áudio 5.1 sem canal central**: reproduzir
-  numa cutscene fixa, verificar mapeamento de canais do XMA e o downmix (C × 0,707 em L e R; LFE opcional).
-- **Arquivos:** patches em `odin2/patches/02xx-*`; testes em `odin2/tests/`.
-- **Métrica:** 0 regressões nas 5 cenas; diálogo audível nas cutscenes 1–3 com save fixo; stress de atomics 1 h sem divergência.
-- **Estimativa:** 1–2 semanas.
-
-## Fase 3 — Vulkan no Adreno 740
-- **Objetivo:** reduzir tempo de GPU e eliminar stutter.
-- **Itens, nesta ordem (cada um com A/B no ADL):**
-  1. `loadOp/storeOp` corretos por passe (CLEAR/DONT_CARE onde o passe começa com clear completo) — já listado pelo upstream como candidato.
-  2. Juntar passes e cortar resolves desnecessários (~175–190 passes/frame medidos no Mac: ~9 ms de overhead).
-  3. GMEM vs sysmem por passe (Turnip: `TU_DEBUG`/heurísticas; proprietário: não controlável — medir).
-  4. Pipeline cache persistente + pré-compilação de pipelines após a Fase 1B; `VK_EXT_graphics_pipeline_library` se o driver expuser.
-  5. Render scale 50–100 % (upstream já tem 0,75) + FSR1 e UI em resolução nativa (exige o fator de escala nos shaders que calculam tiles por FragCoord — upstream já apontou).
-  6. Opções de LOD, sombras, partículas, reflexos — só as que tiverem cvar/hook viável sem tocar conteúdo.
-- **Arquivos:** `odin2/patches/03xx-*` (renderer), `odin2/settings/`.
-- **Métrica:** GPU ms/frame −25 % na cena 2 em relação ao baseline com o mesmo driver; stutter > 50 ms ausente após 2ª sessão.
-- **Estimativa:** 3–4 semanas.
-
-## Fase 4 — CPU, threads e térmica
-- **Objetivo:** 30 fps estáveis com 1 % low > 25 após 30 min (perfil equilibrado).
-- **Itens:** afinidade: principal e render no X3/gold (upstream já fixa o principal), streaming e áudio nos gold restantes, nunca nos silver;
-  ADPF (`APerformanceHint`) com alvo de 33,3 ms; Thermal API (`AThermal_getThermalHeadroom`) reduzindo render scale antes do throttling;
-  Swappy para pacing; travas 30/40/45/60 **somente depois** de um teste de física em 40 fps (ver #12) — se falhar, só 30 + FG.
-  CPU de gravação (o gargalo do S23): paralelizar com secondary command buffers e reduzir hashing XXH3 (estratégia de dirty-tracking).
-- **Arquivos:** `odin2/perf/`, patches `04xx-*`.
-- **Métrica:** teste de 30 min na cena 2 + rodovia, 3 execuções, 1 % low > 25 fps.
-- **Estimativa:** 3–4 semanas.
-
-## Fase 5 — Frame generation e extras
-- **Itens:** lsfg-vk como camada Vulkan (base: `FrankBarretta/lsfg-vk-android` + fluxo do BOTW fork), usuário seleciona o próprio `Lossless.dll`
-  via SAF, nada embarcado; mapeamento nativo do Odin 2 (gatilhos analógicos, botões traseiros), rumble, gyro opcional para mira;
-  menu de configurações por jogo; exportar logs + métricas para o ADL (sem memória do jogo nos logs).
-- **Métrica:** 30→60 apresentados com latência adicional medida e aceitável para você; controles 100 % mapeados.
-- **Estimativa:** 2–3 semanas.
-
----
-
-## Resumo de cronograma (estimativa, sujeito ao baseline)
-| Fase | Duração | Depende de |
+| Prova | Demonstração | O que medir |
 |---|---|---|
-| 0 + 0.5 | ~1,5 semana | aparelho + dumps |
-| 1A | 2–3 sem | 0 |
-| 1B | 2–4 sem | 1A (paralelizável parcialmente) |
-| 2 | 1–2 sem | 0 |
-| 3 | 3–4 sem | 1B |
-| 4 | 3–4 sem | 3 |
-| 5 | 2–3 sem | 4 |
-Total: ~4–5 meses de trabalho focado.
+| **P1** | `libclang.so` e `libld.lld.so` empacotados no APK executam via `execve()` a partir de `nativeLibraryDir` (com `extractNativeLibs=true` / `useLegacyPackaging`) | funciona sob SELinux `untrusted_app` no targetSdk escolhido |
+| **P2** | compilar e linkar uma `.so` pequena no aparelho, colocá-la em `getFilesDir()` e carregá-la com `dlopen` | carregamento OK com `-z now` |
+| **P3** | rodar o codegen do ReXGlue no aparelho e compilar unidades representativas, **incluindo as maiores** das 811, com as flags do upstream | RSS máximo por job, tempo por unidade, temperatura → `-j` seguro e tempo total projetado |
+| **P4** | XenosRecomp + DXC compilados para arm64-android traduzem **um shader capturado** (com adreno_shader_fix, lowering de int64 e UBO), e o renderer o usa no lugar do SPIR-V vindo do PC | saída igual à do PC (diff de SPIR-V) ou diferença explicada; render correto |
+| **P5** | instrumentar a criação de shaders (o upstream já tem `gtav_native_save_missing_shaders`) num carregamento do modo história no aparelho | quantos shaders, quanto tempo leva traduzir todos no aparelho, quantos ainda aparecem depois em jogo |
 
-## O que eu preciso de você
-1. **Acesso ao aparelho:** quem executa as medições? Uma sessão Claude Code local com o Odin 2 via adb seria o ideal; esta sessão em nuvem não alcança o aparelho.
-2. **Specs do seu Odin 2 Portal Pro:** RAM (12 ou 16 GB), versão do Android, versão do driver Adreno de fábrica.
-3. **Versões de Turnip** a usar na matriz (Mr. Purple e Amaral-Adreno-Tools — links/tags).
-4. **Toolchain no APK ou separada?** (APK único ~+200 MB vs. download à parte).
-5. **Aprovação da Fase 0 + 0.5** para eu começar: script de benchmark e integração do adrenotools.
+**Portão G1 (decisão sua):** com P1–P5 em mãos eu apresento prazo e metas revisados para 1A/1B. Se P4 falhar, o plano volta para "shaders via PC" na 1ª versão, e o resto continua igual.
+
+## Fase 1A — Compilação do código no aparelho (produto)
+- Foreground Service `dataSync`: progresso, pausa por temperatura, **checkpoint por arquivo** (`.o` + hash da entrada). Se o targetSdk for 35+, implementar `onTimeout()`: salvar estado, parar e retomar na próxima abertura.
+- Jobs nos núcleos X3 e gold, com `-j` vindo de P3 e limitado pela RAM livre em tempo real.
+- Verificação: SHA-256 dos discos (`expected.txt`), hash de cada `.cpp` gerado contra a referência, mesmas flags do upstream.
+- Toolchain dentro do APK (~+150–250 MB, número exato após P1).
+- **Meta provisória:** < 40 min, a revisar com P3.
+
+## Fase 1B — Shaders no aparelho (produto)
+Ordem: **captura → tradução local → cache persistente → faltantes**.
+1. Na 1ª execução, a tela de carregamento do modo história captura os shaders criados e traduz em lote, com progresso.
+2. O cache SPIR-V e o cache de pipeline persistem, versionados por build e driver.
+3. Shader faltante em jogo: tradução em segundo plano, com registro no log. Política para o frame em que ele falta (pular o draw ou esperar) definida por medição.
+4. Varredura completa dos arquivos do jogo: só se P5/1B mostrarem faltantes relevantes.
+
+## Fase 2 — Corretude ARM64
+- **Atomics:** testes de estresse multi-thread para a semântica de reserva PowerPC no ARM64: falha espúria de `stwcx.`, perda de reserva por escrita de outra thread, `ldarx/stdcx.` de 64 bits, granularidade da reserva, ordenação com `sync/lwsync/isync`. Rodar 1 h no Odin 2 sem divergência, comparando com uma referência sequencial.
+- Cobertura NEON do byteswap (índices além de vértices). Mover para compute só onde o perfil mostrar custo.
+- **Áudio do canal central em cutscenes:** o upstream está investigando o XMA de cutscenes no `issue-fixes` (`a67fdad`, `3af0c1c`). Primeiro reproduzir com save fixo e trazer o trabalho deles; patch próprio só para o que sobrar (mapeamento de canais e downmix com C × 0,707). O que for geral vira contribuição upstream.
+
+## Trilhas de desempenho (CPU e GPU), ordenadas pelo gargalo da Etapa 0
+
+Regra: cada experimento tem **hipótese concreta + previsão + A/B no ADL** (3 execuções, mesma temperatura inicial). Experimentos que o upstream já mediu sem ganho só voltam com hipótese de por que o Adreno 740 / 8 Gen 2 mudaria o resultado:
+- hash workers em threads (não ganhou)
+- conversão de vértices em workers (1–6 ms pior)
+- write-watch por proteção de páginas (2× pior, lock global por falta de página)
+- XMA flush em vez de reopen (menos CPU, mais falhas de áudio)
+
+**Trilha CPU:** afinidade (render e streaming fora dos núcleos silver), redução do hashing XXH3 (dirty-tracking com custo medido), secondary command buffers para gravação paralela, ADPF (`APerformanceHint`) e Thermal API (headroom → ajuste de render scale), Swappy.
+
+**Trilha GPU:** `loadOp/storeOp` por passe, fusão de passes e corte de resolves, GMEM vs sysmem (onde o driver permitir), pipeline cache + GPL se disponível, render scale 50–100 % + FSR1 com UI nativa (exige o fator de escala nos shaders que usam FragCoord para tiles), opções de LOD/sombras/partículas/reflexos onde houver hook viável.
+
+**Metas provisórias** (revistas após a Etapa 0): 30 fps com 1 % low > 25 após 30 min no perfil equilibrado; ganho de GPU e limite de stutter definidos a partir do baseline.
+
+## Política de FPS
+- **30 fps é o padrão** em todo o jogo.
+- Avaliar a solução do upstream (`fab5c28`: 30 fps em veículos, FPS escolhido a pé).
+- Antes de liberar qualquer trava acima de 30 (40/45/60), validar **separadamente** em cada valor: condução, movimento a pé, colisões e física de objetos, missões com cronômetro/scripts sensíveis a tempo, cutscenes (sincronia de áudio). Passar a 40 não libera 45 nem 60.
+- **Frame generation (lsfg-vk)** é experimental: entra só se houver sobra real de GPU, e com latência medida e aceita por você. O ADL registra **fps reais e fps apresentados** separadamente. O `Lossless.dll` é sempre do usuário; nada é embarcado.
+
+## Desde o primeiro APK de teste
+- Controles básicos do Odin 2 funcionando (gamepad interno via SDL).
+- Exportação de logs e métricas para o ADL sem memória do jogo: o upstream já tem relatório de bug com um clique no `issue-fixes` (`de53c76`), que vamos aproveitar.
+
+## Extras (depois da trilha de desempenho)
+Mapeamento completo do Odin 2 (botões traseiros, gatilhos analógicos), rumble, gyro opcional, configurações por jogo.
+
+---
+
+## Estimativa
+Os 4–5 meses da v1 ficam como **estimativa inicial, não compromisso**. Prazo revisado sai no portão G1, depois de P1–P5.
+
+## O que preciso de você
+1. **Quem executa no aparelho:** o ideal é uma sessão local do Claude Code com o Odin 2 via adb, porque esta sessão em nuvem não alcança o aparelho.
+2. Specs do Odin 2 Portal Pro: RAM, versão do Android, versão do driver Adreno de fábrica, perfis de ventoinha disponíveis.
+3. Tags das versões de Turnip (Mr. Purple, Amaral-Adreno-Tools).
+4. targetSdk desejado (afeta `onTimeout` do dataSync e restrições de execução). Proposta: o mesmo do upstream na 1ª versão.
+5. **Aprovação para começar:** Etapa 0 (scripts de benchmark), Etapa 0.5 e as provas P1–P5.
