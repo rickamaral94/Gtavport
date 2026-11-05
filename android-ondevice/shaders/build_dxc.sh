@@ -4,7 +4,8 @@
 # não carregam no bionic, por isso a build cruzada (P4).
 #   android-ondevice/shaders/build_dxc.sh [JOBS]  -> work/dxc/out/{libdxcompiler.so,dxc}
 set -euo pipefail
-source ~/android-tools/env.sh
+[ -f ~/android-tools/env.sh ] && source ~/android-tools/env.sh
+: "${ANDROID_NDK_HOME:?defina ANDROID_NDK_HOME (NDK r29)}"
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 VER=v1.7.2403
 JOBS=${1:-3}

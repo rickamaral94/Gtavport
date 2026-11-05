@@ -1,0 +1,66 @@
+# CI do Gtavport: nada aqui usa o jogo. Verifica pureza estrutural, que a série de patches aplica
+# sobre o upstream fixado, e compila as partes que não dependem do código gerado dos discos.
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  pureza-e-testes:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pureza estrutural (tools/check_purity.py)
+        run: python3 -I tools/check_purity.py
+      - name: Testes (benchmark e pureza)
+        run: |
+          python3 -m unittest discover -s tools/bench/tests -v
+          python3 -m unittest discover -s tools/tests -v
+      - name: Sintaxe dos scripts
+        run: for f in $(git ls-files '*.sh'); do bash -n "$f"; done
+
+  patches-e-android:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Aplicar a série de patches (tools/prepare.sh)
+        run: tools/prepare.sh
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r29
+      - name: Plataforma e build-tools 36
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null
+      - name: libodin2driver + hooks do adrenotools
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: odin2/driver/build.sh
+      - name: Java do APK (SDL + upstream com patches + Gtavport) e manifesto
+        run: |
+          JAR=$ANDROID_HOME/platforms/android-36/android.jar
+          mkdir -p out/classes
+          javac --release 17 -Xlint:-options -classpath "$JAR" -d out/classes $(find \
+            work/gtav/rexglue-sdk/thirdparty/sdl3/android-project/app/src/main/java \
+            work/gtav/tools/android/app/java odin2/android/java -name '*.java')
+          "$ANDROID_HOME/build-tools/36.0.0/d8" --release --min-api 30 --lib "$JAR" --output out $(find out/classes -name '*.class')
+          "$ANDROID_HOME/build-tools/36.0.0/aapt2" link -o out/base.apk -I "$JAR" \
+            --manifest work/gtav/tools/android/app/AndroidManifest.xml --min-sdk-version 30 --target-sdk-version 34
+      - name: Java do APK de prova
+        run: |
+          mkdir -p out/probe
+          javac --release 17 -Xlint:-options -classpath "$ANDROID_HOME/platforms/android-36/android.jar" -d out/probe \
+            $(find android-ondevice/probe/java -name '*.java')
+      - name: JNI do APK de prova
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang++" \
+            -shared -fPIC -O2 -std=c++17 -static-libstdc++ -o out/libodin2probe.so android-ondevice/probe/jni/probe_jni.cpp
+      - name: Pureza dos binários produzidos
+        run: python3 -I tools/check_purity.py build/odin2-driver/out out/base.apk out/libodin2probe.so

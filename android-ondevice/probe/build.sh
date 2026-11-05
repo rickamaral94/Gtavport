@@ -3,7 +3,8 @@
 #   android-ondevice/probe/build.sh [install]   -> build/probe/gtavport-probe.apk
 # Pré-requisito: work/llvm (upstream tools/android/build_llvm.sh, LLVM 19.1.5 para aarch64-android).
 set -euo pipefail
-source ~/android-tools/env.sh
+[ -f ~/android-tools/env.sh ] && source ~/android-tools/env.sh
+: "${ANDROID_NDK_HOME:?defina ANDROID_NDK_HOME (NDK r29)}"
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 P=$ROOT/android-ondevice/probe
 OUT=$ROOT/build/probe

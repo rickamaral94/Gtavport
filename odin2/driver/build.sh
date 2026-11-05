@@ -2,7 +2,8 @@
 # Compila libodin2driver.so e os hooks do adrenotools para arm64-v8a.
 #   odin2/driver/build.sh  -> build/odin2-driver/out/*.so
 set -euo pipefail
-source ~/android-tools/env.sh
+[ -f ~/android-tools/env.sh ] && source ~/android-tools/env.sh
+: "${ANDROID_NDK_HOME:?defina ANDROID_NDK_HOME (NDK r29)}"
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 B=$ROOT/build/odin2-driver
 cmake -S "$ROOT/odin2/driver" -B "$B" -G Ninja -DCMAKE_BUILD_TYPE=Release \
