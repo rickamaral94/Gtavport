@@ -4,7 +4,7 @@
 #
 # Disparo: Actions > release > Run workflow (tag, ex.: v0.1.0-pre1).
 # Assinatura fixa (recomendado, para atualizar sem desinstalar): secrets ODIN2_KEYSTORE_B64 (keystore em
-# base64), ODIN2_KS_PASS, ODIN2_KEY_ALIAS, ODIN2_KEY_PASS. Sem eles, o APK sai com uma chave temporária.
+# base64), ODIN2_KS_PASS, ODIN2_KEY_ALIAS, ODIN2_KEY_PASS. Sem eles a release falha (allow_temp_key força).
 name: release
 on:
   workflow_dispatch:
@@ -151,10 +151,24 @@ jobs:
       - name: Chave de assinatura
         env:
           KS_B64: ${{ secrets.ODIN2_KEYSTORE_B64 }}
+          ODIN2_KS_PASS: ${{ secrets.ODIN2_KS_PASS }}
+          ODIN2_KEY_ALIAS: ${{ secrets.ODIN2_KEY_ALIAS }}
         run: |
           if [ -n "$KS_B64" ]; then
-            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            # Colado à mão (às vezes no celular), o valor pode vir com quebras de linha ou espaços: fora.
+            printf '%s' "$KS_B64" | tr -d ' \t\r\n' > "$RUNNER_TEMP/ks.b64"
+            echo "ODIN2_KEYSTORE_B64: $(wc -c < "$RUNNER_TEMP/ks.b64") caracteres base64 após limpar espaços"
+            if ! base64 -d "$RUNNER_TEMP/ks.b64" > "$RUNNER_TEMP/release.keystore" 2>/dev/null; then
+              echo "::error::ODIN2_KEYSTORE_B64 não é base64 válido (copie a linha inteira do SECRETS-GITHUB.txt, sem o rótulo 'Valor')."
+              exit 1
+            fi
+            ALIAS=$(printf '%s' "$ODIN2_KEY_ALIAS" | tr -d ' \t\r\n')
+            if ! keytool -list -keystore "$RUNNER_TEMP/release.keystore" -storepass:env ODIN2_KS_PASS -alias "$ALIAS" > /dev/null 2>&1; then
+              echo "::error::A keystore decodificou, mas ODIN2_KS_PASS ou ODIN2_KEY_ALIAS não conferem com ela (confira os dois secrets)."
+              exit 1
+            fi
             echo "ODIN2_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+            echo "ODIN2_KEY_ALIAS_CLEAN=$ALIAS" >> "$GITHUB_ENV"
             echo "SIGNING=fixa" >> "$GITHUB_ENV"
           elif [ "${{ inputs.allow_temp_key }}" = "true" ]; then
             echo "SIGNING=temporaria" >> "$GITHUB_ENV"
@@ -175,9 +189,8 @@ jobs:
       - name: Montar a release (pureza de todos os arquivos)
         env:
           ODIN2_KS_PASS: ${{ secrets.ODIN2_KS_PASS }}
-          ODIN2_KEY_ALIAS: ${{ secrets.ODIN2_KEY_ALIAS }}
           ODIN2_KEY_PASS: ${{ secrets.ODIN2_KEY_PASS }}
-        run: tools/release/make_release.sh "${{ inputs.tag }}"
+        run: ODIN2_KEY_ALIAS="${ODIN2_KEY_ALIAS_CLEAN:-}" tools/release/make_release.sh "${{ inputs.tag }}"
       - name: Conferir o certificado do APK (docs/assinatura.md)
         if: env.SIGNING == 'fixa'
         run: |
