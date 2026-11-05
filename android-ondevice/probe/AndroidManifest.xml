@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Gtavport — APK de prova da Etapa P. Mesmos min/targetSdk do APK do upstream (30/34), para que
+     as regras de execução e SELinux testadas aqui sejam as que o jogo vai encontrar. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.gtavport.probe"
+    android:versionCode="1"
+    android:versionName="0.1-probe">
+    <uses-sdk android:minSdkVersion="30" android:targetSdkVersion="34" />
+    <application
+        android:label="Gtavport Probe"
+        android:debuggable="true"
+        android:extractNativeLibs="true"
+        android:hasCode="true"
+        android:largeHeap="true">
+        <activity android:name="com.gtavport.probe.ProbeActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
