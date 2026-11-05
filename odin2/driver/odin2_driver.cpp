@@ -6,6 +6,7 @@
 #include <dlfcn.h>
 #include <sys/stat.h>
 
+#include <cstdio>
 #include <cstdlib>
 #include <mutex>
 #include <string>
@@ -22,6 +23,16 @@ const char* Env(const char* name) {
   return (v && *v) ? v : nullptr;
 }
 
+// Resultado para a tela "Driver gráfico" (ODIN2_VK_STATUS_FILE): pedido, efetivo e motivo.
+void WriteStatus(const char* requested, const char* effective, const char* detail) {
+  const char* path = Env("ODIN2_VK_STATUS_FILE");
+  if (!path) return;
+  if (FILE* f = std::fopen(path, "w")) {
+    std::fprintf(f, "requested=%s\neffective=%s\ndetail=%s\n", requested, effective, detail ? detail : "");
+    std::fclose(f);
+  }
+}
+
 std::string WithSlash(const char* dir) {
   std::string s(dir);
   if (!s.empty() && s.back() != '/') s += '/';
@@ -32,6 +43,7 @@ void Open() {
   const char* name = Env("ODIN2_VK_DRIVER");
   if (!name || std::string(name) == "system") {
     __android_log_print(ANDROID_LOG_INFO, kTag, "driver: system (sem driver customizado)");
+    WriteStatus("system", "system", "");
     return;
   }
   const char* dir = Env("ODIN2_VK_DRIVER_DIR");
@@ -42,6 +54,7 @@ void Open() {
     __android_log_print(ANDROID_LOG_ERROR, kTag,
                         "driver '%s' pedido mas ODIN2_VK_DRIVER_DIR/LIB/HOOK_DIR incompletos: usando system",
                         name);
+    WriteStatus(name, "system", "variáveis ODIN2_VK_* incompletas");
     return;
   }
   std::string tmp_dir = tmp ? WithSlash(tmp) : std::string();
@@ -53,15 +66,18 @@ void Open() {
   if (!h) {
     __android_log_print(ANDROID_LOG_ERROR, kTag, "adrenotools falhou para '%s' (%s%s): usando system: %s",
                         name, drv_dir.c_str(), lib, dlerror());
+    WriteStatus(name, "system", "adrenotools não conseguiu abrir o driver");
     return;
   }
   if (!dlsym(h, "vkGetInstanceProcAddr")) {
     __android_log_print(ANDROID_LOG_ERROR, kTag, "'%s' sem vkGetInstanceProcAddr: usando system", name);
+    WriteStatus(name, "system", "driver sem vkGetInstanceProcAddr");
     return;
   }
   g_handle = h;
   g_name = name;
   __android_log_print(ANDROID_LOG_INFO, kTag, "driver: %s (%s%s)", name, drv_dir.c_str(), lib);
+  WriteStatus(name, name, lib);
 }
 
 }  // namespace

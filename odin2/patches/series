@@ -5,3 +5,4 @@ rexglue-sdk 0001-rexglue-vulkan-driver-odin2.patch
 plume       0002-plume-vulkan-driver-odin2.patch
 gtav        0003-pipeline-cache-por-driver.patch
 gtav        0004-apk-driver-odin2.patch
+gtav        0005-tela-driver-grafico.patch
