@@ -1,0 +1,186 @@
+# Release do Gtavport: compila tudo a partir do código (nada do jogo entra em nenhum passo), verifica a
+# pureza de cada arquivo e publica uma pre-release com os APKs, a pasta android/ para o launcher do PC,
+# as licenças e a fonte correspondente.
+#
+# Disparo: Actions > release > Run workflow (tag, ex.: v0.1.0-pre1).
+# Assinatura fixa (recomendado, para atualizar sem desinstalar): secrets ODIN2_KEYSTORE_B64 (keystore em
+# base64), ODIN2_KS_PASS, ODIN2_KEY_ALIAS, ODIN2_KEY_PASS. Sem eles, o APK sai com uma chave temporária.
+name: release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag da release (ex.: v0.1.0-pre1)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  NDK_VERSION: r29
+
+jobs:
+  llvm:
+    # clang + lld 19.1.5 para aarch64-android (APK de prova). Horas na primeira vez; depois vem do cache.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Liberar disco
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL /usr/local/lib/node_modules && df -h /
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: |
+            work/llvm/build/android-llvm/out
+            work/llvm/build/android-llvm/android/lib/clang
+            work/llvm/build/android-llvm/llvm-project-19.1.5.src/llvm/LICENSE.TXT
+          key: llvm-19.1.5-android-${{ hashFiles('upstream/tools/android/build_llvm.sh') }}
+      - uses: nttld/setup-ndk@v1
+        if: steps.cache.outputs.cache-hit != 'true'
+        id: ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Compilar LLVM para o aparelho
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get install -y --no-install-recommends ninja-build > /dev/null
+          mkdir -p ~/android-tools work/llvm/tools/android
+          echo "export ANDROID_NDK_HOME=${{ steps.ndk.outputs.ndk-path }}" > ~/android-tools/env.sh
+          cp upstream/tools/android/build_llvm.sh work/llvm/tools/android/
+          bash work/llvm/tools/android/build_llvm.sh 4
+          # só o necessário fica (o cache e o artefato não levam a árvore de build)
+          find work/llvm/build/android-llvm/android -mindepth 1 -maxdepth 1 ! -name lib -exec rm -rf {} +
+      - uses: actions/upload-artifact@v4
+        with:
+          name: llvm
+          path: |
+            work/llvm/build/android-llvm/out
+            work/llvm/build/android-llvm/android/lib/clang
+            work/llvm/build/android-llvm/llvm-project-19.1.5.src/llvm/LICENSE.TXT
+          retention-days: 3
+
+  dxc:
+    # DirectXShaderCompiler 416fab6b (= v1.8.2407, o do dxc-bin do XenosRecomp) para aarch64-android.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - name: Liberar disco
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL && df -h /
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: |
+            work/dxc/out
+            work/dxc/DirectXShaderCompiler/LICENSE.TXT
+          key: dxc-416fab6b-android-${{ hashFiles('android-ondevice/shaders/build_dxc.sh') }}
+      - uses: nttld/setup-ndk@v1
+        if: steps.cache.outputs.cache-hit != 'true'
+        id: ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Compilar DXC para o aparelho
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          sudo apt-get install -y --no-install-recommends ninja-build > /dev/null
+          android-ondevice/shaders/build_dxc.sh 4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dxc
+          path: |
+            work/dxc/out
+            work/dxc/DirectXShaderCompiler/LICENSE.TXT
+          retention-days: 3
+
+  release:
+    needs: [llvm, dxc]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Liberar disco
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL && df -h /
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Ferramentas
+        run: |
+          sudo apt-get install -y --no-install-recommends ninja-build spirv-tools rsync zip xz-utils > /dev/null
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null
+          mkdir -p ~/android-tools
+          { echo "export ANDROID_HOME=$ANDROID_HOME"; echo "export ANDROID_NDK_HOME=${{ steps.ndk.outputs.ndk-path }}";
+            echo 'export PATH=$ANDROID_HOME/build-tools/36.0.0:$ANDROID_HOME/platform-tools:$PATH'; } > ~/android-tools/env.sh
+      - uses: actions/download-artifact@v4
+        with:
+          name: llvm
+          path: work/llvm/build/android-llvm
+      - uses: actions/download-artifact@v4
+        with:
+          name: dxc
+          path: work/dxc
+      - name: Árvore do jogo (upstream + dependências nos pins + série de patches)
+        run: tools/prepare.sh
+      - name: SDK ReXGlue para Android
+        run: JOBS=4 bash work/gtav/tools/android/build_sdk.sh > /tmp/sdk.log 2>&1 || { tail -50 /tmp/sdk.log; exit 1; }
+      - name: libgtav_fast.so sem código do jogo + driver
+        run: |
+          JOBS=4 tools/build_android_shell.sh
+          odin2/driver/build.sh
+      - name: Ferramentas de shader e APK de prova
+        run: |
+          chmod +x work/dxc/out/* work/llvm/build/android-llvm/out/*
+          android-ondevice/shaders/build_shader_fix.sh
+          android-ondevice/shaders/build_xenosrecomp.sh
+          android-ondevice/probe/build.sh
+      - name: Chave de assinatura
+        env:
+          KS_B64: ${{ secrets.ODIN2_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "ODIN2_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+            echo "SIGNING=fixa" >> "$GITHUB_ENV"
+          else
+            echo "SIGNING=temporaria" >> "$GITHUB_ENV"
+          fi
+      - name: Licenças de terceiros (textos completos)
+        run: |
+          L=$RUNNER_TEMP/licenses && mkdir -p "$L"
+          git clone -q --depth 1 https://github.com/SnapdragonStudios/snapdragon-gsr "$RUNNER_TEMP/sgsr"
+          cp "$RUNNER_TEMP/sgsr/LICENSE" "$L/Snapdragon-GSR-BSD-3-Clause.txt"
+          git clone -q --depth 1 https://github.com/GPUOpen-Effects/FidelityFX-FSR "$RUNNER_TEMP/fsr"
+          cp "$RUNNER_TEMP/fsr/license.txt" "$L/AMD-FidelityFX-FSR-MIT.txt"
+          git clone -q --depth 1 https://github.com/rickamaral94/Botwnspxci "$RUNNER_TEMP/botw"
+          cp "$RUNNER_TEMP/botw/LICENSE" "$L/BOTWRecompAndroid-MIT.txt"
+          echo "THIRD_PARTY_LICENSES=$L" >> "$GITHUB_ENV"
+      - name: Montar a release (pureza de todos os arquivos)
+        env:
+          ODIN2_KS_PASS: ${{ secrets.ODIN2_KS_PASS }}
+          ODIN2_KEY_ALIAS: ${{ secrets.ODIN2_KEY_ALIAS }}
+          ODIN2_KEY_PASS: ${{ secrets.ODIN2_KEY_PASS }}
+        run: tools/release/make_release.sh "${{ inputs.tag }}"
+      - name: Notas da release
+        run: |
+          TAG="${{ inputs.tag }}"
+          sed -e "s/@TAG@/$TAG/g" -e "s/@SHA@/$GITHUB_SHA/g" -e "s/@SIGNING@/$SIGNING/g" \
+            tools/release/RELEASE_NOTES.md > "$RUNNER_TEMP/notes.md"
+          { echo; echo '### SHA-256'; echo '```'; cat "dist/$TAG/SHA256SUMS"; echo '```'; } >> "$RUNNER_TEMP/notes.md"
+      - name: Publicar pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ inputs.tag }}"
+          gh release create "$TAG" --prerelease --target "$GITHUB_SHA" --title "Gtavport $TAG (pré-release, não testada no aparelho)" \
+            --notes-file "$RUNNER_TEMP/notes.md" dist/"$TAG"/*

@@ -1,0 +1,30 @@
+--- a/tools/android/build_apk.sh
++++ b/tools/android/build_apk.sh
+@@ -37,8 +37,10 @@
+   sed 's/ *android:debuggable="true"//' "$APP/AndroidManifest.xml" > "$OUT/AndroidManifest.release.xml"
+   MANIFEST=$OUT/AndroidManifest.release.xml
+ fi
++# Gtavport: ODIN2_PACKAGE troca o applicationId (as classes Java continuam com.gtavrecomp.app), para
++# o APK do Gtavport conviver com o do upstream sem conflito de assinatura nem perda de dados.
+ "$BT/aapt2" link -o base.apk --manifest "$MANIFEST" -I "$JAR" \
+-  --min-sdk-version 30 --target-sdk-version 34
++  --min-sdk-version 30 --target-sdk-version 34 ${ODIN2_PACKAGE:+--rename-manifest-package "$ODIN2_PACKAGE"}
+ 
+ cp "${LIBS[@]}" "$SDK_LIB/librexruntime.so" "$SDK_LIB/librexgpu-xenos.so" \
+    "$NDK_LIBCXX" stage/lib/arm64-v8a/
+@@ -52,8 +54,15 @@
+   keytool -genkeypair -keystore "$KEY" -storepass android -keypass android -alias androiddebugkey \
+     -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" >/dev/null
+ fi
++# Gtavport: ODIN2_KEYSTORE (+ ODIN2_KS_PASS, ODIN2_KEY_ALIAS, ODIN2_KEY_PASS) assina com uma chave fixa,
++# para que releases seguintes instalem por cima sem desinstalar (o que apagaria os dados do jogo).
++if [ -n "${ODIN2_KEYSTORE:-}" ]; then
++  "$BT/apksigner" sign --ks "$ODIN2_KEYSTORE" --ks-pass env:ODIN2_KS_PASS --ks-key-alias "${ODIN2_KEY_ALIAS:?}" \
++    --key-pass env:ODIN2_KEY_PASS --out $NAME.apk aligned.apk
++else
+ "$BT/apksigner" sign --ks "$KEY" --ks-pass pass:android --key-pass pass:android \
+   --out $NAME.apk aligned.apk
++fi
+ rm -f unaligned.apk aligned.apk base.apk
+ ls -la $NAME.apk
+ if [ "$1" = install ]; then

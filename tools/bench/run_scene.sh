@@ -8,7 +8,7 @@
 # SECS   duração da captura (padrão 120); WARMUP: espera antes de capturar (padrão 60, carregar o save)
 # Variáveis: FAN_MODE e PERF_MODE (obrigatórias, registradas no resultado), MAX_TEMP_C (espera esfriar
 # até essa temperatura da bateria, padrão 32), COLD_CACHE=1 (apaga o cache de pipeline antes),
-# PKG (padrão com.gtavrecomp.app).
+# PKG (padrão com.gtavrecomp.app = APK do upstream; o APK do Gtavport é com.gtavport.app).
 # Saída: bench/results/LABEL/{meta.txt,raw/} → depois tools/bench/summarize.py bench/results/LABEL
 set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)

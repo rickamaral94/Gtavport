@@ -9,6 +9,7 @@ __pycache__/
 bench/results/*/raw/
 build/
 data/
+dist/
 gtav-android-pack*.zip
 shader_cache/
 spirv/

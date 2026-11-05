@@ -4,7 +4,7 @@
 #   tools/driver/push_driver.sh turnip-amaral-v1.zip      -> env:ODIN2_VK_DRIVER=turnip-amaral-v1
 set -euo pipefail
 [ -f ~/android-tools/env.sh ] && source ~/android-tools/env.sh
-PKG=${PKG:-com.gtavrecomp.app}
+PKG=${PKG:-com.gtavrecomp.app}  # APK do Gtavport: PKG=com.gtavport.app
 zip=${1:?uso: push_driver.sh PACOTE.zip}
 unzip -l "$zip" | grep -q "meta.json" || { echo "sem meta.json: não é um pacote de driver adrenotools" >&2; exit 1; }
 D=/sdcard/Android/data/$PKG/files/drivers_import
