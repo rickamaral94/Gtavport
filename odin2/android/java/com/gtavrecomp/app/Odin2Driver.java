@@ -65,6 +65,7 @@ final class Odin2Driver {
         }
         Odin2DriverActivity.addShortcut(c);
         Odin2PerfLogsActivity.addShortcut(c);
+        Odin2DeviceBuild.configureRuntime(c);  // Fase 1: ferramentas de shader do aparelho
         File status = statusFile(c);
         status.getParentFile().mkdirs();
         setenv("ODIN2_VK_STATUS_FILE", status.getAbsolutePath());

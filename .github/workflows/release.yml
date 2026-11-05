@@ -148,6 +148,8 @@ jobs:
           android-ondevice/shaders/build_shader_fix.sh
           android-ondevice/shaders/build_xenosrecomp.sh
           android-ondevice/probe/build.sh
+      - name: Pacote da compilação no aparelho (Fase 1)
+        run: android-ondevice/device/make_device_bundle.sh
       - name: Chave de assinatura
         env:
           KS_B64: ${{ secrets.ODIN2_KEYSTORE_B64 }}

@@ -13,7 +13,14 @@ D=$ROOT/dist/$TAG
 rm -rf "$D" && mkdir -p "$D"
 
 # 1) pasta android/ do pacote do PC, com o APK do Gtavport (make_shell.sh do upstream).
-export ODIN2_JAVA=$ROOT/odin2/android/java ODIN2_LIBS=$ROOT/build/odin2-driver/out ODIN2_PACKAGE=com.gtavport.app
+export ODIN2_JAVA=$ROOT/odin2/android/java ODIN2_PACKAGE=com.gtavport.app
+# Fase 1 (compilar no aparelho): libs de build + toolroot (android-ondevice/device/make_device_bundle.sh);
+# sem o pacote, sai o APK só com o fluxo pelo PC.
+if [ -d "$ROOT/build/device/libs" ]; then
+  export ODIN2_LIBS=$ROOT/build/device/libs ODIN2_ASSETS=$ROOT/build/device/assets
+else
+  export ODIN2_LIBS=$ROOT/build/odin2-driver/out
+fi
 mkdir -p "$G/build/android-dll"
 SHELL_OUT=$ROOT/build/release-android
 rm -rf "$SHELL_OUT" && mkdir -p "$SHELL_OUT"

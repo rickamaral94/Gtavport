@@ -1,0 +1,66 @@
+--- a/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
++++ b/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
+@@ -184,6 +184,19 @@
+             + "your PC (Build for Android in the PC launcher, after setting the game up there), copy "
+             + "it and your disc images and title update to this phone (for example to Download), "
+             + "choose them below and press Install. About 16 GB is copied and checked.", 14));
++        // Gtavport (Fase 1): everything on this device, no PC and no pack, when the APK has the tools.
++        try {
++            Class<?> dev = Class.forName("com.gtavrecomp.app.Odin2DeviceBuild");
++            if ((boolean) dev.getDeclaredMethod("available", android.content.Context.class).invoke(null, this)) {
++                Button device = new Button(this);
++                device.setText("Install + build on this device (no PC)...");
++                device.setOnClickListener(v -> startActivity(new Intent().setClassName(this, "com.gtavrecomp.app.Odin2DeviceBuildActivity")));
++                box.addView(device);
++                box.addView(text("Or, with a pack made by your PC (Build for Android):", 14));
++            }
++        } catch (Exception e) {
++            // APK do upstream: só o fluxo pelo PC
++        }
+         for (int i = 0; i < 4; i++) {
+             final int slot = i;
+             box.addView(text(LABELS[i], 15));
+--- a/tools/android/app/AndroidManifest.xml
++++ b/tools/android/app/AndroidManifest.xml
+@@ -12,6 +12,11 @@
+     <uses-permission android:name="android.permission.VIBRATE" />
+     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
++    <!-- Gtavport (Fase 1): a compilação no aparelho como serviço em primeiro plano. -->
++    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
++    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
++    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
++    <uses-permission android:name="android.permission.WAKE_LOCK" />
+     <application
+         android:label="GTA V Recomp"
+         android:appCategory="game"
+@@ -57,5 +62,15 @@
+             android:exported="true"
+             android:label="Logs de desempenho"
+             android:configChanges="orientation|screenSize|keyboardHidden" />
++        <!-- Gtavport (Fase 1): instalar e compilar neste aparelho. -->
++        <activity
++            android:name="com.gtavrecomp.app.Odin2DeviceBuildActivity"
++            android:exported="false"
++            android:label="Compilar no aparelho"
++            android:configChanges="orientation|screenSize|keyboardHidden" />
++        <service
++            android:name="com.gtavrecomp.app.Odin2BuildService"
++            android:exported="false"
++            android:foregroundServiceType="dataSync" />
+     </application>
+ </manifest>
+--- a/tools/android/build_apk.sh
++++ b/tools/android/build_apk.sh
+@@ -39,8 +39,10 @@
+ fi
+ # Gtavport: ODIN2_PACKAGE troca o applicationId (as classes Java continuam com.gtavrecomp.app), para
+ # o APK do Gtavport conviver com o do upstream sem conflito de assinatura nem perda de dados.
++# Gtavport: ODIN2_ASSETS = pasta de assets (toolroot da Fase 1).
+ "$BT/aapt2" link -o base.apk --manifest "$MANIFEST" -I "$JAR" \
+-  --min-sdk-version 30 --target-sdk-version 34 ${ODIN2_PACKAGE:+--rename-manifest-package "$ODIN2_PACKAGE"}
++  --min-sdk-version 30 --target-sdk-version 34 ${ODIN2_PACKAGE:+--rename-manifest-package "$ODIN2_PACKAGE"} \
++  ${ODIN2_ASSETS:+-A "$ODIN2_ASSETS"}
+ 
+ cp "${LIBS[@]}" "$SDK_LIB/librexruntime.so" "$SDK_LIB/librexgpu-xenos.so" \
+    "$NDK_LIBCXX" stage/lib/arm64-v8a/

@@ -1,0 +1,84 @@
+--- a/gtav/src/native/shader_compiler.cpp
++++ b/gtav/src/native/shader_compiler.cpp
+@@ -18,6 +18,7 @@
+ #include <atomic>
+ #include <condition_variable>
+ #include <cstdio>
++#include <cstdlib>
+ #include <cstring>
+ #include <deque>
+ #include <filesystem>
+@@ -75,6 +76,38 @@
+ bool g_intake_started = false;
+ 
+ fs::path ToolsDir() { return ExeDir() / "tools"; }
++
++// Gtavport: on the phone the tools are in the APK's nativeLibraryDir (the only place Android runs
++// files from) as lib*.so, set by the app (Odin2DeviceBuild.configureRuntime): GTAVPORT_NATIVE_LIB_DIR
++// and GTAVPORT_SHADER_COMMON (XenosRecomp's shader_common.h with the Adreno edits of make_spirv.sh).
++// Then the Adreno passes of the PC's Android build run here too, through shader_fix (the C++ ports of
++// ubo_constants.py and lower_int64.py): XenosRecomp -> ubo -> DXC -> int64, as install.cpp PhoneShaders.
++struct DeviceTools {
++  bool on = false;
++  fs::path xr, dxc, fix, common;
++};
++const DeviceTools& Device() {
++  static const DeviceTools t = [] {
++    DeviceTools d;
++#ifdef __ANDROID__
++    const char* lib = std::getenv("GTAVPORT_NATIVE_LIB_DIR");
++    const char* common = std::getenv("GTAVPORT_SHADER_COMMON");
++    if (lib && *lib && common && *common) {
++      d.xr = fs::path(lib) / "libxenosrecomp.so";
++      d.dxc = fs::path(lib) / "libdxc.so";
++      d.fix = fs::path(lib) / "libshader_fix.so";
++      d.common = common;
++      std::error_code ec;
++      d.on = fs::exists(d.xr, ec) && fs::exists(d.dxc, ec) && fs::exists(d.fix, ec) && fs::exists(d.common, ec);
++      // dxc and XenosRecomp load libdxcompiler.so from the same folder.
++      if (d.on) setenv("LD_LIBRARY_PATH", lib, 1);
++      REXLOG_INFO("[native] on-device shader tools: {}", d.on ? "ready" : "missing (APK without them)");
++    }
++#endif
++    return d;
++  }();
++  return t;
++}
+ fs::path SpirvDirPath() {
+   const std::string& dir = REXCVAR_GET(gtav_native_spirv_dir);
+   return dir.empty() ? fs::path(DefaultSpirvDir()) : fs::path(dir);
+@@ -123,7 +156,7 @@
+ #ifdef _WIN32
+   const fs::path dxc = tools / "dxc.exe";
+ #else
+-  const fs::path dxc = tools / "dxc";
++  const fs::path dxc = Device().on ? Device().dxc : tools / "dxc";
+ #endif
+   std::vector<std::string> args = {dxc.string(), "-T", pixel ? "ps_6_0" : "vs_6_0", "-HV", "2021",
+                                    "-all-resources-bound", "-spirv", "-fvk-use-dx-layout",
+@@ -131,6 +164,8 @@
+   if (!pixel) args.push_back("-fvk-invert-y");
+   args.insert(args.end(), {"-Fo", tmp.string(), hlsl.string()});
+   if (!Run(args)) return false;
++  // Gtavport: no shaderInt64 on the Adreno driver: 64-bit integers -> uvec2 (lower_int64).
++  if (Device().on && !Run({Device().fix.string(), "int64", tmp.string(), tmp.string()})) return false;
+   // Vertex shaders with computed-index fetches need the raw streams (see Backend::Shader).
+   if (!pixel) {
+     std::ifstream f(hlsl);
+@@ -215,10 +250,14 @@
+ #ifdef _WIN32
+   const fs::path xr = tools / "XenosRecomp.exe";
+ #else
+-  const fs::path xr = tools / "XenosRecomp";
++  const fs::path xr = Device().on ? Device().xr : tools / "XenosRecomp";
+ #endif
+-  if (!Run({xr.string(), bin.string(), hlsl.string(), (tools / "shader_common.h").string()}) || !fs::exists(hlsl))
++  const fs::path common = Device().on ? Device().common : tools / "shader_common.h";
++  if (!Run({xr.string(), bin.string(), hlsl.string(), common.string()}) || !fs::exists(hlsl))
+     return false;
++  // Gtavport: constants from uniform buffers on the phone (ubo_constants), before the variants
++  // (they are made from this text, as in install.cpp PhoneShaders).
++  if (Device().on && !Run({Device().fix.string(), "ubo", hlsl.string()})) return false;
+   // Variants first: the backend retries every missing shader once the base .spv appears.
+   if (!CompileVariants(name, hlsl)) return false;
+   return CompileHlsl(hlsl, name, pixel);

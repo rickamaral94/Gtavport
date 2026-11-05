@@ -26,7 +26,7 @@ from pathlib import Path
 
 MAX_BYTES = 40 * 1024 * 1024  # acima disso, num repositório de código, é suspeito
 # O APK de prova leva clang/lld e o APK do jogo leva o runtime: binários grandes legítimos.
-LARGE_OK = re.compile(r"(^|/)lib(clang|ld\.lld|dxcompiler|rexruntime|rexgpu-xenos|gtav_fast|hook_impl|c\+\+_shared)\.so$")
+LARGE_OK = re.compile(r"(^|/)lib(clang|ld\.lld|dxcompiler|rexruntime|rexglue|rexgpu-xenos|gtav_fast|hook_impl|c\+\+_shared)\.so$")
 
 NAME_RULES = [
     (re.compile(r"\.(iso|xex|xexp|rpf|xiso|god)$", re.I), "imagem/executável/arquivo do jogo"),
