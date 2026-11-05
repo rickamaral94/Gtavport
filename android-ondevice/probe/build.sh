@@ -41,6 +41,11 @@ if [ -f "$ROOT/work/dxc/out/libdxcompiler.so" ] && [ -f "$ST/XenosRecomp" ] && [
       -e 's/vk::RawBufferLoad<float2>(\(g_PushConstants\.SharedConstants + \)\([0-9]*\))/float2(vk::RawBufferLoad<float>(\1\2), vk::RawBufferLoad<float>(\1\2 + 4))/' \
       "$ROOT/work/gtav/thirdparty/XenosRecomp/XenosRecomp/shader_common.h" > assets/shader_common.h
   grep -q '1u << semanticIndex' assets/shader_common.h && ! grep -q 'RawBufferLoad<float2>' assets/shader_common.h
+  cp "$P/assets/probe_ps.hlsl" assets/
+  # Referência do PC: o mesmo HLSL pelo dxc-bin do XenosRecomp (mesmo commit do DXC do Android).
+  DXB=$ROOT/work/gtav/thirdparty/XenosRecomp/thirdparty/dxc-bin
+  LD_LIBRARY_PATH=$DXB/lib/x64 "$DXB/bin/x64/dxc-linux" -T ps_6_0 -HV 2021 -all-resources-bound -spirv \
+    -fvk-use-dx-layout -Wno-ignored-attributes -Qstrip_debug -Fo assets/probe_ps.ref.spv assets/probe_ps.hlsl
   echo "P4: ferramentas de shader incluídas"
 else
   echo "P4: ferramentas de shader ausentes (APK sem P4a/P4b)"

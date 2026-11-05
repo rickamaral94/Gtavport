@@ -332,21 +332,30 @@ public class ProbeActivity extends Activity {
         line("  " + tail(new File(priv, "logs/p4_dxc_version.log"), 200).replace('\n', ' '));
         File dir = new File(priv, "p4a");
         File hlsl = new File(dir, "probe_ps.hlsl"), spv = new File(dir, "probe_ps.spv");
-        // 64-bit de propósito: exercita o lower_int64 (o driver proprietário não tem shaderInt64).
-        write(hlsl, "cbuffer C : register(b0, space4) { float4 tint; uint2 mask64; };\n"
-                + "Texture2D t : register(t0); SamplerState s : register(s0);\n"
-                + "float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {\n"
-                + "  uint64_t m = (uint64_t(mask64.y) << 32) | mask64.x;\n"
-                + "  float bit = (float)((m >> (uint)(uv.x * 63.0)) & 1ull);\n"
-                + "  return t.Sample(s, uv) * tint * bit; }\n");
+        // Asset próprio (64-bit de propósito: exercita o lower_int64). O mesmo arquivo foi compilado no
+        // host pelo DXC do dxc-bin (mesmo commit): assets/probe_ps.ref.spv, para comparar byte a byte.
+        copyAsset("probe_ps.hlsl", hlsl);
         spv.delete();
         long[] r = run("p4a_dxc", bigCoreMask(), dxcArgs("ps_6_0", hlsl, spv, false));
         if (r[0] != 0 || !isSpirv(spv)) { line("  FALHOU: DXC não gerou SPIR-V"); return false; }
+        File ref = new File(dir, "probe_ps.ref.spv");
+        copyAsset("probe_ps.ref.spv", ref);
+        boolean same = Arrays.equals(Files.readAllBytes(ref.toPath()), Files.readAllBytes(spv.toPath()));
+        line("  SPIR-V do DXC do aparelho vs. DXC do PC (mesmo commit): " + (same ? "IDÊNTICO" : "DIFERENTE (" + spv.length() + " vs " + ref.length() + " bytes)"));
         File low = new File(dir, "probe_ps.lowered.spv");
         r = run("p4a_int64", 0, tool("shader_fix"), "int64", spv.getPath(), low.getPath());
         boolean ok = r[0] == 0 && isSpirv(low);
         line(String.format(Locale.ROOT, "  SPIR-V %d bytes -> lower_int64 %d bytes: %s", spv.length(), low.length(), ok ? "ok" : "FALHOU"));
-        return ok;
+        return ok && same;
+    }
+
+    private void copyAsset(String name, File to) throws Exception {
+        to.getParentFile().mkdirs();
+        try (InputStream in = getAssets().open(name); OutputStream o = new FileOutputStream(to)) {
+            byte[] b = new byte[1 << 16];
+            int n;
+            while ((n = in.read(b)) > 0) o.write(b, 0, n);
+        }
     }
 
     /** shader_common.h do XenosRecomp com as duas trocas de texto do make_spirv.sh (asset). */

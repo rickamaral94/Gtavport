@@ -16,6 +16,7 @@ Saída != 0 se houver qualquer achado.
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import re
 import subprocess
@@ -39,6 +40,21 @@ NAME_RULES = [
 ]
 
 XDVDFS = b"MICROSOFT*XBOX*MEDIA"
+ALLOW_FILE = Path(__file__).with_name("purity_allow.txt")
+
+
+def load_allow(path: Path = ALLOW_FILE) -> set[tuple[str, str]]:
+    """(sha256, sufixo do caminho) das exceções revisadas."""
+    out = set()
+    if path.exists():
+        for line in path.read_text().splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and not line.startswith("#"):
+                out.add((parts[0].lower(), parts[1]))
+    return out
+
+
+ALLOW = load_allow()
 GENERATED_MIN = 20  # REX_FUNC_PROLOGUE() por arquivo: o template define a macro, código gerado a usa por função
 
 
@@ -63,6 +79,10 @@ def magic_findings(name: str, head: bytes, data: bytes | None) -> list[str]:
 
 
 def check_blob(name: str, data: bytes, findings: list[str], depth: int = 0) -> None:
+    if ALLOW:
+        digest = hashlib.sha256(data).hexdigest()
+        if any(digest == h and name.endswith(suffix) for h, suffix in ALLOW):
+            return
     for rx, why in NAME_RULES:
         if rx.search(name):
             findings.append(f"{name}: {why}")

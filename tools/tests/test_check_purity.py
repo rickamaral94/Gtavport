@@ -67,5 +67,20 @@ class Purity(unittest.TestCase):
         self.assertTrue(any("big.bin" in f for f in run("probe.apk", apk)))
 
 
+    def test_allowlist_by_hash(self):
+        import hashlib
+        spv = b"\x03\x02\x23\x07" + b"nosso shader"
+        old = C.ALLOW
+        try:
+            C.ALLOW = {(hashlib.sha256(spv).hexdigest(), "assets/probe_ps.ref.spv")}
+            self.assertEqual(run("x.apk!assets/probe_ps.ref.spv", spv), [])
+            # mesmo caminho, conteúdo diferente: volta a ser barrado
+            self.assertTrue(run("x.apk!assets/probe_ps.ref.spv", spv + b"!"))
+            # mesmo conteúdo em outro caminho: barrado
+            self.assertTrue(run("x.apk!assets/outro.spv", spv))
+        finally:
+            C.ALLOW = old
+
+
 if __name__ == "__main__":
     unittest.main()

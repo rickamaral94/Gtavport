@@ -1,0 +1,5 @@
+# Exceções da verificação de pureza (tools/check_purity.py), por SHA-256 do CONTEÚDO.
+# Só arquivos nossos que caem numa regra por formato. Qualquer mudança no arquivo muda o hash e a
+# exceção deixa de valer: revisar e atualizar aqui de propósito.
+# sha256  sufixo-do-caminho  justificativa
+8123b6490a911f49a87e7c9a6894e765df551cf8e6fcecd4852d3ea7d0155668  assets/probe_ps.ref.spv  SPIR-V do nosso shader de teste (android-ondevice/probe/assets/probe_ps.hlsl) compilado pelo dxc-bin no host; não é do jogo
