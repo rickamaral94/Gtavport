@@ -1,0 +1,3 @@
+# Série de patches do Gtavport, aplicada em ordem sobre a árvore preparada.
+# Formato: <alvo> <arquivo>   alvo = gtav | rexglue-sdk | plume | XenosRecomp
+# Faixas: 00xx infraestrutura/driver · 02xx corretude · 03xx GPU · 04xx CPU/térmica · 05xx extras

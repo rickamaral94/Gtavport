@@ -11,3 +11,6 @@ spirv/
 gtav-android-pack*.zip
 *.ipa
 build/
+work/
+bench/results/*/raw/
+__pycache__/
