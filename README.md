@@ -10,5 +10,6 @@ Estado: Caminho A aprovado; plano em avaliação. Leia [`docs/plano-caminho-A.md
 [`docs/baseline.md`](docs/baseline.md).
 
 Suporte a drivers **Turnip** (importar, escolher, testar) via adrenotools: [`odin2/driver/README.md`](odin2/driver/README.md).
+Menu "Video": anti-aliasing (FXAA/SMAA), upscaler (FSR 1 / Snapdragon GSR 1) e resolução interna: [`odin2/post/README.md`](odin2/post/README.md).
 
 Layout previsto (após aprovação): `upstream/` (submódulo pinado), `odin2/` (patches e tuning), `android-ondevice/` (compilação no aparelho).

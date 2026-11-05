@@ -62,5 +62,10 @@ jobs:
         run: |
           "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang++" \
             -shared -fPIC -O2 -std=c++17 -static-libstdc++ -o out/libodin2probe.so android-ondevice/probe/jni/probe_jni.cpp
+      - name: Passes de pós-processamento no lavapipe (+ comparação com os shaders do BOTW)
+        run: |
+          sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan-dev spirv-tools glslang-tools > /dev/null
+          git clone -q --depth 1 https://github.com/rickamaral94/Botwnspxci /tmp/botw
+          BOTW_SRC=/tmp/botw odin2/post/test/run.sh
       - name: Pureza dos binários produzidos
         run: python3 -I tools/check_purity.py build/odin2-driver/out out/base.apk out/libodin2probe.so
