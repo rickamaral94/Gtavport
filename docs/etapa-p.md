@@ -4,10 +4,10 @@ Atualizado: 2026-11-05. Nada aqui foi executado num aparelho ainda: esta sessão
 
 | Prova | Ferramenta | Estado | Falta |
 |---|---|---|---|
-| P1 exec clang/lld | `android-ondevice/probe` | código pronto; JNI e Java compilam; clang/lld para o aparelho **compilando** | APK final + rodar no Odin 2 |
+| P1 exec clang/lld | `android-ondevice/probe` | **APK gerado** (127 MB: clang 80 MB + lld 43 MB, dependem só de libc/libm/libdl, alinhados a 16 KB) | rodar no Odin 2 |
 | P2 compilar → dlopen | idem | pronto (C e C++23 freestanding, flags e link do upstream) | rodar no Odin 2 |
 | P3 unidades reais | `tools/p3/make_bundle.sh` + probe | pronto | sua instalação do PC + aparelho |
-| P4 shader no aparelho | `android-ondevice/shaders/build_dxc.sh` | script do DXC v1.7.2403 pronto, build depois do LLVM | XenosRecomp para Android, integração, shader capturado |
+| P4 shader no aparelho | `android-ondevice/shaders/` | XenosRecomp compila/linka para Android (verificado com DXC stub); DXC `416fab6b` (mesmo do dxc-bin) compilando | DXC real, CLI de shader no APK de prova, shader capturado |
 | P5 contagem de shaders | cvar do upstream `gtav_native_save_missing_shaders` | instruções abaixo | aparelho + jogo |
 
 ## P4: cadeia que precisa rodar no aparelho
