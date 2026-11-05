@@ -6,7 +6,7 @@ Snapdragon 8 Gen 2 / Adreno 740, com meta de compilar o jogo **no próprio apare
 **Nenhum dado do jogo neste repositório ou em qualquer APK** — ver as regras "Keeping it clean" do upstream.
 Sem contorno de DRM. Sem modo online.
 
-Estado: fase de decisão. Leia [`docs/decisao-arquitetura.md`](docs/decisao-arquitetura.md) e
+Estado: Caminho A aprovado; plano em avaliação. Leia [`docs/plano-caminho-A.md`](docs/plano-caminho-A.md), [`docs/decisao-arquitetura.md`](docs/decisao-arquitetura.md) e
 [`docs/baseline.md`](docs/baseline.md).
 
 Layout previsto (após aprovação): `upstream/` (submódulo pinado), `odin2/` (patches e tuning), `android-ondevice/` (compilação no aparelho).

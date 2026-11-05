@@ -1,6 +1,6 @@
 # Decisão de arquitetura: Caminho A (Xbox 360 TU27) vs Caminho B (PC x86-64)
 
-Status: **aguardando aprovação do Amaral**. Nenhum código é escrito antes da resposta.
+Status: **Caminho A aprovado em 2026-11-05; B congelado.**
 Data: 2026-11-05. Upstream analisado: `andrewnakas/gtav-recomp` @ `2a76184` (2026-11-03, GPL-3.0, ReXGlue v0.10.0).
 
 ## O que o upstream já resolve (lido no código, não suposto)
