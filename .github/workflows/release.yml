@@ -12,6 +12,10 @@ on:
       tag:
         description: "Tag da release (ex.: v0.1.0-pre1)"
         required: true
+      allow_temp_key:
+        description: "Publicar mesmo sem a chave fixa (a próxima release exigiria desinstalar o app)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -152,8 +156,11 @@ jobs:
             echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
             echo "ODIN2_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
             echo "SIGNING=fixa" >> "$GITHUB_ENV"
-          else
+          elif [ "${{ inputs.allow_temp_key }}" = "true" ]; then
             echo "SIGNING=temporaria" >> "$GITHUB_ENV"
+          else
+            echo "::error::Sem os secrets ODIN2_KEYSTORE_B64/ODIN2_KS_PASS/ODIN2_KEY_ALIAS/ODIN2_KEY_PASS: a release não é publicada com chave temporária (docs/assinatura.md)."
+            exit 1
           fi
       - name: Licenças de terceiros (textos completos)
         run: |
@@ -171,6 +178,14 @@ jobs:
           ODIN2_KEY_ALIAS: ${{ secrets.ODIN2_KEY_ALIAS }}
           ODIN2_KEY_PASS: ${{ secrets.ODIN2_KEY_PASS }}
         run: tools/release/make_release.sh "${{ inputs.tag }}"
+      - name: Conferir o certificado do APK (docs/assinatura.md)
+        if: env.SIGNING == 'fixa'
+        run: |
+          want=$(grep -oE '([0-9A-F]{2}:){31}[0-9A-F]{2}' docs/assinatura.md | head -1 | tr -d ':' | tr 'A-F' 'a-f')
+          got=$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "dist/${{ inputs.tag }}/gtavport-${{ inputs.tag }}.apk" \
+                | sed -n 's/.*certificate SHA-256 digest: //p' | head -1)
+          echo "esperado $want / obtido $got"
+          [ -n "$want" ] && [ "$want" = "$got" ]
       - name: Notas da release
         run: |
           TAG="${{ inputs.tag }}"

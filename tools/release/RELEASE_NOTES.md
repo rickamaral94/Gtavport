@@ -38,6 +38,4 @@ AYN Odin 2 Portal Pro (Snapdragon 8 Gen 2 / Adreno 740). Commit: `@SHA@`.
 ## Limites conhecidos
 - Nada foi executado num Odin 2 ainda; custo em ms das opções novas e quais sensores o Android libera estão por medir.
 - AA e upscaler passam também pelo HUD (HUD nativo é trabalho da Fase 3).
-- Assinatura desta build: **@SIGNING@**. Se for "temporaria", a próxima release pode exigir desinstalar este app, e
-  desinstalar apaga os dados do jogo instalados nele. Configure uma chave fixa (secrets do workflow) antes de
-  usar a sério.
+- Assinatura desta build: **@SIGNING@** (chave fixa = atualizações instalam por cima; certificado em `docs/assinatura.md`).

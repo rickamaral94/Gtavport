@@ -5,6 +5,7 @@
 *.xex
 *.xexp
 *gtav_game*
+.gtavport-signing/
 __pycache__/
 bench/results/*/raw/
 build/
