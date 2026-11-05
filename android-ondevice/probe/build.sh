@@ -29,6 +29,30 @@ cp "$LLVM/out/clang" stage/lib/arm64-v8a/libclang.so
 cp "$LLVM/out/lld" stage/lib/arm64-v8a/libld.lld.so
 (cd "$(dirname "$RES")" && zip -q -r -X "$OUT/assets/clang-resource.zip" include)
 
+# P4 (opcional): DXC, XenosRecomp e shader_fix para o aparelho, se já compilados.
+ST=$ROOT/work/shadertools/out
+if [ -f "$ROOT/work/dxc/out/libdxcompiler.so" ] && [ -f "$ST/XenosRecomp" ] && [ -f "$ST/shader_fix" ]; then
+  cp "$ROOT/work/dxc/out/libdxcompiler.so" stage/lib/arm64-v8a/
+  cp "$ROOT/work/dxc/out/dxc" stage/lib/arm64-v8a/libdxc.so
+  cp "$ST/XenosRecomp" stage/lib/arm64-v8a/libxenosrecomp.so
+  cp "$ST/shader_fix" stage/lib/arm64-v8a/libshader_fix.so
+  # shader_common.h do XenosRecomp com as mesmas trocas do upstream (tools/android/make_spirv.sh).
+  sed -e 's/(1ull << semanticIndex)/(1u << semanticIndex)/' \
+      -e 's/vk::RawBufferLoad<float2>(\(g_PushConstants\.SharedConstants + \)\([0-9]*\))/float2(vk::RawBufferLoad<float>(\1\2), vk::RawBufferLoad<float>(\1\2 + 4))/' \
+      "$ROOT/work/gtav/thirdparty/XenosRecomp/XenosRecomp/shader_common.h" > assets/shader_common.h
+  grep -q '1u << semanticIndex' assets/shader_common.h && ! grep -q 'RawBufferLoad<float2>' assets/shader_common.h
+  echo "P4: ferramentas de shader incluídas"
+else
+  echo "P4: ferramentas de shader ausentes (APK sem P4a/P4b)"
+fi
+# Todo DT_NEEDED precisa estar no APK ou ser biblioteca pública do Android.
+PUBLIC="libc.so libm.so libdl.so liblog.so libz.so libandroid.so libvulkan.so libEGL.so libGLESv3.so libjnigraphics.so libmediandk.so libOpenSLES.so libaaudio.so"
+for so in stage/lib/arm64-v8a/*.so; do
+  for need in $("$NDKBIN/llvm-readelf" -d "$so" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p'); do
+    [ -f "stage/lib/arm64-v8a/$need" ] || [[ " $PUBLIC " == *" $need "* ]] || { echo "$(basename "$so") precisa de $need, que não está no APK" >&2; exit 1; }
+  done
+done
+
 javac --release 17 -nowarn -classpath "$JAR" -d classes $(find "$P/java" -name '*.java') 2>&1 | grep -v "^Note:\|JAVA_TOOL_OPTIONS" || true
 "$BT/d8" --release --min-api 30 --lib "$JAR" --output stage $(find classes -name '*.class')
 "$BT/aapt2" link -o base.apk --manifest "$P/AndroidManifest.xml" -I "$JAR" -A assets \

@@ -3,7 +3,8 @@
 # binários que o XenosRecomp do upstream usa (dxc-bin: "libdxcompiler.so: 1.8(dev;4662-416fab6b)"),
 # para gerar o mesmo SPIR-V que o PC. (O padrão "v1.7.2403" do build-macos.sh do dxc-bin não existe
 # como tag.) Os binários "linux arm64" do dxc-bin são glibc e não carregam no bionic: daí a build
-# cruzada (P4).
+# cruzada (P4). -Wno-invalid-specialization: o libc++ do NDK r29 recusa a especialização de
+# std::is_nothrow_constructible que o LLVM 3.7 do DXC faz (StringRef.h); não muda o código gerado.
 #   android-ondevice/shaders/build_dxc.sh [JOBS]  -> work/dxc/out/{libdxcompiler.so,dxc}
 set -euo pipefail
 [ -f ~/android-tools/env.sh ] && source ~/android-tools/env.sh
@@ -31,6 +32,7 @@ cmake -S "$SRC" -B "$W/android" -G Ninja -C "$SRC/cmake/caches/PredefinedParams.
   -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
   -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 -DANDROID_STL=c++_static \
   -DCMAKE_BUILD_TYPE=Release -DENABLE_SPIRV_CODEGEN=ON -DSPIRV_BUILD_TESTS=OFF \
+  -DCMAKE_CXX_FLAGS="-Wno-invalid-specialization" \
   -DLLVM_TABLEGEN="$W/host/bin/llvm-tblgen" -DCLANG_TABLEGEN="$W/host/bin/clang-tblgen" \
   -DLLVM_INCLUDE_TESTS=OFF -DCLANG_INCLUDE_TESTS=OFF -DHLSL_INCLUDE_TESTS=OFF -DLLVM_BUILD_TOOLS=OFF \
   -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384" \

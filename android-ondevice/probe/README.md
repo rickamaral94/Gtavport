@@ -8,6 +8,8 @@ APK separado (`com.gtavport.probe`), mesmos min/targetSdk do APK do upstream (30
 | **W^X** (controle) | a mesma ferramenta copiada para `getFilesDir()` **não** executa | `posix_spawn` falha com EACCES |
 | **P2** | compilar (C e C++23 freestanding, flags do upstream) → linkar (opções de link do `libgtav_game.so`) → `dlopen` → chamar | retorna 42 nos dois casos |
 | **S** | carga sintética (~400 funções longas): RSS e tempo do clang no aparelho | só referência; **não substitui P3** |
+| **P4a** | DXC no aparelho: HLSL próprio → SPIR-V (flags do upstream) → `lower_int64` | SPIR-V válido nos dois passos |
+| **P4b** | cadeia do `make_spirv.sh` em shaders capturados (`files/p4/*.bin`) | SPIR-V ok; idêntico a `files/p4/ref/*.spv` do PC quando fornecido |
 | **P3** | unidades reais do jogo do usuário, maiores primeiro, N jobs nos núcleos grandes | gera `p3_result.csv` (RSS máx, tempo, temperatura por unidade) |
 
 Medição por processo: `posix_spawn` + `wait4` (RSS máximo, tempo de parede, CPU user/sys), afinidade de CPU

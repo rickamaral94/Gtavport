@@ -35,6 +35,9 @@ import java.util.concurrent.Future;
  *  P3  se files/p3/ existir no armazenamento externo do app: compila as unidades com as flags dadas,
  *      N jobs nos núcleos grandes, CSV por unidade. Os .cpp vêm do próprio jogo do usuário e nunca
  *      saem do aparelho.
+ *  P4a DXC no aparelho: um pixel shader HLSL nosso -> SPIR-V com as flags do upstream -> lower_int64.
+ *  P4b se files/p4/*.bin existir (shaders capturados pelo próprio jogo): a cadeia do make_spirv.sh
+ *      inteira (XenosRecomp -> ubo -> DXC -> int64); compara com files/p4/ref/NOME.spv do PC se houver.
  *
  * Relatório: tela, logcat (tag Odin2Probe) e files/probe_report.txt no armazenamento externo.
  */
@@ -67,7 +70,10 @@ public class ProbeActivity extends Activity {
             boolean p2 = p1 && p2();
             if (p2) synthetic();
             p3();
-            line("\nRESUMO: P1=" + (p1 ? "PASSOU" : "FALHOU") + " P2=" + (p2 ? "PASSOU" : (p1 ? "FALHOU" : "não executada")));
+            boolean p4 = p4a();
+            if (p4) p4b();
+            line("\nRESUMO: P1=" + (p1 ? "PASSOU" : "FALHOU") + " P2=" + (p2 ? "PASSOU" : (p1 ? "FALHOU" : "não executada"))
+                    + " P4a=" + (hasShaderTools() ? (p4 ? "PASSOU" : "FALHOU") : "sem ferramentas no APK"));
         } catch (Throwable t) {
             line("ERRO: " + Log.getStackTraceString(t));
         }
@@ -87,6 +93,10 @@ public class ProbeActivity extends Activity {
     }
 
     private String clang() { return new File(libDir, "libclang.so").getPath(); }
+    private String tool(String n) { return new File(libDir, "lib" + n + ".so").getPath(); }
+    private boolean hasShaderTools() {
+        return new File(tool("dxc")).isFile() && new File(tool("xenosrecomp")).isFile() && new File(tool("shader_fix")).isFile();
+    }
     private String lld() { return new File(libDir, "libld.lld.so").getPath(); }
 
     private long[] run(String label, long mask, String... argv) {
@@ -287,6 +297,112 @@ public class ProbeActivity extends Activity {
         float t0 = batteryC();
         run("synth_cc", bigCoreMask(), cc.toArray(new String[0]));
         line("  bateria " + t0 + " -> " + batteryC() + " °C");
+    }
+
+    // Flags do upstream (tools/android/make_spirv.sh).
+    private static final String[] DXC_FLAGS = {"-HV", "2021", "-all-resources-bound", "-spirv", "-fvk-use-dx-layout",
+            "-Wno-ignored-attributes", "-Qstrip_debug"};
+
+    private String[] dxcArgs(String profile, File in, File out, boolean vs) {
+        List<String> a = new ArrayList<>(Arrays.asList(tool("dxc"), "-T", profile));
+        a.addAll(Arrays.asList(DXC_FLAGS));
+        if (vs) a.add("-fvk-invert-y");
+        a.addAll(Arrays.asList("-Fo", out.getPath(), in.getPath()));
+        return a.toArray(new String[0]);
+    }
+
+    private static boolean isSpirv(File f) {
+        try (java.io.FileInputStream in = new java.io.FileInputStream(f)) {
+            byte[] h = new byte[4];
+            return in.read(h) == 4 && h[0] == 0x03 && h[1] == 0x02 && h[2] == 0x23 && h[3] == 0x07;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private boolean p4a() throws Exception {
+        line("\n== P4a: DXC no aparelho (shader HLSL próprio, não do jogo)");
+        if (!hasShaderTools()) {
+            line("  APK sem libdxc.so/libxenosrecomp.so/libshader_fix.so — pulada (build_dxc.sh, build_xenosrecomp.sh, build_shader_fix.sh)");
+            return false;
+        }
+        // O dxc e o XenosRecomp carregam libdxcompiler.so de nativeLibraryDir.
+        android.system.Os.setenv("LD_LIBRARY_PATH", libDir.getPath(), true);
+        run("p4_dxc_version", 0, tool("dxc"), "--version");
+        line("  " + tail(new File(priv, "logs/p4_dxc_version.log"), 200).replace('\n', ' '));
+        File dir = new File(priv, "p4a");
+        File hlsl = new File(dir, "probe_ps.hlsl"), spv = new File(dir, "probe_ps.spv");
+        // 64-bit de propósito: exercita o lower_int64 (o driver proprietário não tem shaderInt64).
+        write(hlsl, "cbuffer C : register(b0, space4) { float4 tint; uint2 mask64; };\n"
+                + "Texture2D t : register(t0); SamplerState s : register(s0);\n"
+                + "float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {\n"
+                + "  uint64_t m = (uint64_t(mask64.y) << 32) | mask64.x;\n"
+                + "  float bit = (float)((m >> (uint)(uv.x * 63.0)) & 1ull);\n"
+                + "  return t.Sample(s, uv) * tint * bit; }\n");
+        spv.delete();
+        long[] r = run("p4a_dxc", bigCoreMask(), dxcArgs("ps_6_0", hlsl, spv, false));
+        if (r[0] != 0 || !isSpirv(spv)) { line("  FALHOU: DXC não gerou SPIR-V"); return false; }
+        File low = new File(dir, "probe_ps.lowered.spv");
+        r = run("p4a_int64", 0, tool("shader_fix"), "int64", spv.getPath(), low.getPath());
+        boolean ok = r[0] == 0 && isSpirv(low);
+        line(String.format(Locale.ROOT, "  SPIR-V %d bytes -> lower_int64 %d bytes: %s", spv.length(), low.length(), ok ? "ok" : "FALHOU"));
+        return ok;
+    }
+
+    /** shader_common.h do XenosRecomp com as duas trocas de texto do make_spirv.sh (asset). */
+    private File shaderCommon() throws Exception {
+        File f = new File(priv, "p4/shader_common.h");
+        if (f.isFile()) return f;
+        f.getParentFile().mkdirs();
+        try (InputStream in = getAssets().open("shader_common.h"); OutputStream o = new FileOutputStream(f)) {
+            byte[] b = new byte[1 << 16];
+            int n;
+            while ((n = in.read(b)) > 0) o.write(b, 0, n);
+        }
+        return f;
+    }
+
+    private void p4b() throws Exception {
+        File src = new File(ext, "p4");
+        File[] bins = src.listFiles((d, n) -> n.endsWith(".bin"));
+        if (bins == null || bins.length == 0) {
+            line("\n== P4b: sem files/p4/*.bin (shaders capturados pelo jogo) — pulada");
+            return;
+        }
+        line("\n== P4b: cadeia completa do make_spirv.sh em " + bins.length + " shader(s) capturado(s)");
+        File common = shaderCommon();
+        File work = new File(priv, "p4/work");
+        deleteTree(work);
+        work.mkdirs();
+        File csv = new File(ext, "p4_result.csv");
+        int ok = 0, same = 0, refs = 0;
+        try (FileWriter w = new FileWriter(csv)) {
+            w.write("shader,xenos_ms,ubo_ms,dxc_ms,int64_ms,dxc_rss_kb,result,ref\n");
+            for (File bin : bins) {
+                String name = bin.getName().replaceAll("\\.bin$", "");
+                boolean vs = !name.startsWith("ps_");
+                File hlsl = new File(work, name + ".hlsl"), spv = new File(work, name + ".spv");
+                long[] a = run("p4b_xr_" + name, 0, tool("xenosrecomp"), bin.getPath(), hlsl.getPath(), common.getPath());
+                long[] b = a[0] == 0 ? run("p4b_ubo_" + name, 0, tool("shader_fix"), "ubo", hlsl.getPath()) : new long[6];
+                long[] c = a[0] == 0 && b[0] == 0 ? run("p4b_dxc_" + name, bigCoreMask(), dxcArgs(vs ? "vs_6_0" : "ps_6_0", hlsl, spv, vs)) : new long[6];
+                long[] d = c[0] == 0 && spv.isFile() ? run("p4b_int64_" + name, 0, tool("shader_fix"), "int64", spv.getPath(), spv.getPath()) : new long[6];
+                boolean good = a[0] == 0 && b[0] == 0 && c[0] == 0 && d[0] == 0 && isSpirv(spv);
+                String ref = "";
+                File refSpv = new File(src, "ref/" + name + ".spv");
+                if (good && refSpv.isFile()) {
+                    refs++;
+                    boolean eq = Arrays.equals(Files.readAllBytes(refSpv.toPath()), Files.readAllBytes(spv.toPath()));
+                    ref = eq ? "idêntico ao PC" : "DIFERENTE do PC";
+                    if (eq) same++;
+                }
+                if (good) ok++;
+                w.write(String.format(Locale.ROOT, "%s,%d,%d,%d,%d,%d,%s,%s\n", name, a[1], b[1], c[1], d[1], c[2], good ? "ok" : "falhou", ref));
+                hlsl.delete();
+                spv.delete();
+            }
+        }
+        deleteTree(work);  // HLSL/SPIR-V são derivados do jogo: não ficam no aparelho além do teste
+        line(String.format(Locale.ROOT, "  P4b: %d/%d ok; comparados com o PC: %d, idênticos: %d -> %s", ok, bins.length, refs, same, csv));
     }
 
     /**

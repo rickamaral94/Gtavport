@@ -18,6 +18,17 @@ Lida em `tools/android/make_spirv.sh` (upstream):
   CLI `tools/android/shader_fix`): não precisa de Python no aparelho.
 - Os binários "linux arm64" do `dxc-bin` são glibc: não servem no Android. Daí a build cruzada do DXC.
 - Entrada: os `.bin` que o próprio jogo grava em `shader_cache/` no aparelho (P5).
+- Todas as quatro ferramentas compilam para aarch64-android: XenosRecomp (948 KB), `shader_fix` (1 MB),
+  DXC `416fab6b` = v1.8.2407 (o mesmo commit dos binários do `dxc-bin`, para o SPIR-V sair igual ao do PC).
+- No APK de prova: **P4a** roda o DXC num shader HLSL nosso (com int64, para exercitar o `lower_int64`) e
+  **P4b** roda a cadeia inteira nos `.bin` em `files/p4/`, comparando byte a byte com `files/p4/ref/*.spv` do PC.
+  HLSL e SPIR-V gerados são apagados ao fim do teste; fica só o CSV com tempos e resultado.
+
+## Achado para a Fase 1B (varredura)
+No modo diretório, o XenosRecomp já varre arquivos arbitrários procurando contêineres de shader (assinatura
+`0x102A1100` + tamanhos consistentes). É a base da "varredura dos arquivos do jogo" deixada como melhoria opcional.
+**Não verificado:** se os RPF do 360 guardam esses contêineres sem compressão/criptografia. Se não guardarem,
+seria preciso extraí-los antes, e o plano continua sendo captura → tradução → cache → faltantes.
 
 ## P5: como medir
 Com o jogo no aparelho (APK do upstream), `tools/android/set_args.sh --gtav_native_save_missing_shaders=true`,

@@ -5,7 +5,7 @@ rexglue-sdk       https://github.com/rexglue/rexglue-sdk           f5337cd
 plume             https://github.com/renderbag/plume               0ce184b
 XenosRecomp       https://github.com/hedge-dev/XenosRecomp         990d03b
 libadrenotools    https://github.com/bylaws/libadrenotools         8fae8ce254dfc1344527e05301e43f37dea2df80
-DirectXShaderCompiler https://github.com/microsoft/DirectXShaderCompiler 416fab6b (mesmo commit do dxc-bin do XenosRecomp)
+DirectXShaderCompiler https://github.com/microsoft/DirectXShaderCompiler 416fab6b = v1.8.2407 (mesmo commit do dxc-bin do XenosRecomp)
 llvm              https://github.com/llvm/llvm-project             llvmorg-19.1.5
 ndk               android-ndk                                      r29
 android-platform  android                                          36 (build-tools 36.0.0, igual ao upstream)
