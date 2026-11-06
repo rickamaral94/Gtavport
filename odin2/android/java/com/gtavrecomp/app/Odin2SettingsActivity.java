@@ -28,7 +28,7 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
             {"gtav_native_render_scale", "0.75"}, {"odin2_upscaler", "bilinear"}, {"odin2_fsr_sharpness", "0.2"},
             {"odin2_antialias", "off"}, {"gtav_native_max_anisotropy", "16"}, {"gtav_native_vsync", "true"},
             {"gtav_fps_limit", "30"}, {"gtav_native_fps", "false"}, {"gtav_touch_controls", "true"},
-            {"gtav_native_async_pipelines", "true"},
+            {"gtav_native_async_pipelines", "true"}, {"user_language", "1"},
     };
 
     @Override
@@ -126,6 +126,11 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
 
         Tab d = new Tab("Exibição");
         tabs.add(d);
+        opt(d, "user_language", "Idioma do jogo",
+                "Textos e legendas do jogo: o idioma que o console informa ao jogo (o GTA V do Xbox 360 traz português do "
+                        + "Brasil). Vale na próxima vez que o jogo abrir.",
+                new String[] {"1", "9", "5", "4", "6", "3"},
+                new String[] {"English", "Português (Brasil)", "Español", "Français", "Italiano", "Deutsch"});
         opt(d, "gtav_fps_limit", "Limite de FPS",
                 "30: o limitador do próprio jogo (mais estável, esquenta menos). Sem limite: o aparelho roda o quanto conseguir.",
                 new String[] {"30", "45", "60", "0"}, new String[] {"30 (o do jogo)", "45", "60", "Sem limite"});

@@ -57,7 +57,7 @@ using Clock = std::chrono::steady_clock;
 using namespace diag;
 
 constexpr double kWarmupMs = 5000;       // jogo contínuo antes de começar
-constexpr uint32_t kGameplayDraws = 250;  // menos que isso: tela de loading, menu, vídeo
+constexpr uint32_t kGameplayDraws = 100;  // menos que isso: tela de loading, menu, vídeo
 constexpr int kTargets = 4;               // threads amostradas por PC
 
 enum class State { kIdle, kWaiting, kRecording, kReporting };
@@ -69,6 +69,9 @@ double g_warm_ms = 0;          // jogo contínuo acumulado na espera
 double g_game_ms = 0;          // jogo medido
 Clock::time_point g_rec_start, g_armed_at;
 std::string g_last_report;     // caminho do último relatório (para o menu)
+bool g_from_file = false;      // pedido da tela Configurações: o arquivo só sai quando houver relatório
+double g_armed_frames_ms = 0;  // tempo de quadros desde o pedido (sem jogo confirmado em 120 s, mede assim mesmo)
+bool g_unconfirmed = false;
 bool g_menu_open_hint = false;
 
 // Quadros da medição
@@ -203,6 +206,9 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
     REXLOG_INFO("[diag] {}", s);
   };
   line("run: " + RunDescription() + " | medição " + std::to_string(g_seconds) + " s de jogo");
+  if (g_unconfirmed)
+    line("aviso: 120 s sem 5 s de jogo confirmados (cena com " + std::to_string(kGameplayDraws) +
+         "+ draws, menu fechado); medido assim mesmo, pode incluir loading ou menus");
 
   std::vector<double> iv, iv_on, iv_off, rec, idle, gw;
   double game_ms = 0;
@@ -331,6 +337,7 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
   const std::filesystem::path file = dir / ("perf-diag-" + Timestamp() + ".txt");
   std::ofstream(file) << "# Gtavport — Medir desempenho (odin2/perf/odin2_diag.cpp)\n" << out.str();
   REXLOG_INFO("[diag] relatório: {}", file.string());
+  if (g_from_file) std::filesystem::remove(ExeDir() / "diag_request.txt", ec);
   std::lock_guard lock(g_mutex);
   g_last_report = file.string();
 }
@@ -444,11 +451,14 @@ void Run() {
   }
 }
 
-void Arm(int seconds, const char* why) {
+void Arm(int seconds, const char* why, bool from_file) {
   State expected = State::kIdle;
   if (!g_state.compare_exchange_strong(expected, State::kWaiting)) return;
   {
     std::lock_guard lock(g_mutex);
+    g_from_file = from_file;
+    g_armed_frames_ms = 0;
+    g_unconfirmed = false;
     g_seconds = seconds;
     g_warm_ms = 0;
     g_game_ms = 0;
@@ -463,7 +473,7 @@ void Arm(int seconds, const char* why) {
 
 }  // namespace
 
-void DiagRequest(int seconds) { Arm(seconds, "menu do jogo"); }
+void DiagRequest(int seconds) { Arm(seconds, "menu do jogo", false); }
 
 void DiagCheckRequestFile() {
   std::error_code ec;
@@ -471,8 +481,9 @@ void DiagCheckRequestFile() {
   if (!std::filesystem::exists(f, ec)) return;
   int seconds = 0;
   std::ifstream(f) >> seconds;
-  std::filesystem::remove(f, ec);
-  if (seconds > 0) Arm(std::min(seconds, 3600), "pedido na tela Configurações do app");
+  // O arquivo fica até sair um relatório: um início do jogo que fecha antes não gasta o pedido.
+  if (seconds > 0) Arm(std::min(seconds, 3600), "pedido na tela Configurações do app", true);
+  else std::filesystem::remove(f, ec);
 }
 
 void DiagOnFrame(const FrameSample& s, bool menu_open) {
@@ -481,14 +492,20 @@ void DiagOnFrame(const FrameSample& s, bool menu_open) {
   const bool game = !menu_open && s.draws >= kGameplayDraws && s.interval_ms < 5000;
   std::lock_guard lock(g_mutex);
   if (st == State::kWaiting) {
-    g_warm_ms = game ? g_warm_ms + s.interval_ms : 0;
-    if (g_warm_ms >= kWarmupMs) {
+    // Jogo acumulado: o menu aberto zera; quadros leves (loading, um corte) só não contam. A ~13 fps um
+    // único quadro leve zerava a espera e a medição nunca começava.
+    if (menu_open) g_warm_ms = 0;
+    else if (game) g_warm_ms += s.interval_ms;
+    if (!menu_open) g_armed_frames_ms += std::min(s.interval_ms, 1000.0);
+    const bool fallback = g_armed_frames_ms >= 120000;
+    if (g_warm_ms >= kWarmupMs || fallback) {
+      g_unconfirmed = g_warm_ms < kWarmupMs;
       g_rec_start = Clock::now();
       g_state = State::kRecording;
     }
     return;
   }
-  if (!game) {
+  if (menu_open || (!game && !g_unconfirmed)) {
     g_nongame_frames++;
     return;
   }

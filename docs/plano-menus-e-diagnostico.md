@@ -40,7 +40,29 @@ Gtavport. As opções atuais todas vão para lá (nada some).
 **U2 — Tela inicial alinhada.** Mesmas abas e textos do U1 na tela Java (ou, se o Amaral preferir o visual idêntico,
 uma tela inicial nativa em ImGui antes do boot do jogo — mais trabalho, decidir depois do U1).
 
-Ordem sugerida: D1 → D2 → U1 → U2 (o stutter é o que mais incomoda; os menus vêm logo depois e já usam o D1 para
+**L1 — Tradução pt-BR (pedido do Amaral, 06/11).** O GTA V do Xbox 360 escolhe os textos pelo idioma que o
+console informa (`XGetLanguage`); o runtime respondia sempre inglês. Patch 0022 (o idioma vem de `user_language`) e
+a opção *Idioma do jogo* (Configurações > Exibição e menu do jogo; 9 = português do Brasil). Feito na v0.2.6;
+falta confirmar no aparelho que os textos em português estão nos discos (se não estiverem, o jogo volta ao inglês ou
+mostra textos faltando: aí a opção sai). Depois: o menu do jogo (U1) também em pt-BR.
+
+**R1 — 1080p (pedido do Amaral, 06/11).** Hoje a cena 3D é desenhada em 1280x720 (o 720p do Xbox) vezes a
+"Resolução interna" (50-100%) e ampliada para a tela 1920x1080. O renderer já desenha os alvos de largura total numa
+escala (constante de especialização 1/escala nos shaders); 1080p é a escala 1,5. Passos: liberar a escala acima de 1
+(hoje limitada a 1), conferir resolves/cópias/tiles do EDRAM e a UI do jogo nessa escala, medir no aparelho. Custo
+de GPU ~2,25x a 100% (hoje ~10 ms por quadro): faz sentido depois do D2, quando a CPU deixar de ser o limite; com
+FSR/SGSR dá para usar 1,25 (1600x900) como meio-termo.
+
+Ordem atualizada: D1 → D2 → L1 (já entra junto, é pequena) → R1 → U1 → U2.
+
+### O que o primeiro log com a sonda mostrou (v0.2.4, 06/11)
+Durante o jogo (~13-16 fps), por 10 s: `SDLThread` (a thread principal do SDL, que roda o laço de eventos) usou
+~9,5 s de CPU e `GPU Commands` (o processador de comandos da GPU emulada) ~8,5-9,4 s, enquanto a thread principal do
+jogo usou só ~1-4 s. Ou seja: duas threads do runtime quase no máximo e o jogo esperando. O `GPU Commands` gira
+esperando comandos (`gpu_idle_spins`) por desenho; o `SDLThread` deveria dormir em `SDL_WaitEvent`. São os primeiros
+alvos do D2, com o relatório do D1 (amostras de PC) para saber onde o tempo vai dentro delas.
+
+Ordem sugerida antes: D1 → D2 → U1 → U2 (o stutter é o que mais incomoda; os menus vêm logo depois e já usam o D1 para
 mostrar o relatório).
 
 ## Fora deste plano

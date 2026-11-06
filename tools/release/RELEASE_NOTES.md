@@ -1,9 +1,9 @@
 > [!WARNING]
-> **Pré-release em teste no aparelho.** Novidade desta versão: **Medir desempenho** (como no TOTK/BOTW): no menu do
-> jogo (Start/Voltar > Performance) ou no app (Configurações > Desempenho). Mede 60 s ou 10 min de jogo e gera um
-> relatório em Logs de desempenho: fps e travadas, GPU, clocks, temperatura, CPU de cada thread, em que núcleo elas
-> rodam e em que funções do jogo o tempo vai. Versões anteriores: ícone/nome Gtavport, menu e Configurações no estilo
-> GTA V, Sair do jogo pelo menu, atualizar sem recompilar o jogo.
+> **Pré-release em teste no aparelho.** Nesta versão: **Idioma do jogo** (Configurações > Exibição, ou no menu do
+> jogo): português do Brasil e outros, no próximo início; **Medir desempenho** mais robusto (o pedido feito no app
+> fica até sair um relatório, mesmo que o jogo seja aberto e fechado antes; começa mesmo com quadros de loading no
+> meio). Antes: Medir desempenho, ícone/nome Gtavport, menu e Configurações no estilo GTA V, Sair do jogo pelo menu,
+> atualizar sem recompilar o jogo.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.
