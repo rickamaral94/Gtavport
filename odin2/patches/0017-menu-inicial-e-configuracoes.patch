@@ -1,0 +1,22 @@
+--- a/tools/android/app/AndroidManifest.xml
++++ b/tools/android/app/AndroidManifest.xml
+@@ -68,6 +68,19 @@
+             android:exported="false"
+             android:label="Compilar no aparelho"
+             android:configChanges="orientation|screenSize|keyboardHidden" />
++        <!-- Gtavport: menu inicial e configurações no estilo do menu do GTA V. -->
++        <activity
++            android:name="com.gtavrecomp.app.Odin2MenuActivity"
++            android:exported="false"
++            android:label="Gtavport"
++            android:screenOrientation="sensorLandscape"
++            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation" />
++        <activity
++            android:name="com.gtavrecomp.app.Odin2SettingsActivity"
++            android:exported="false"
++            android:label="Configurações"
++            android:screenOrientation="sensorLandscape"
++            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation" />
+         <service
+             android:name="com.gtavrecomp.app.Odin2BuildService"
+             android:exported="false"

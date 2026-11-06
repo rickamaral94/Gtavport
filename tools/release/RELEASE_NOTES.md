@@ -1,7 +1,7 @@
 > [!WARNING]
-> **Pré-release em teste no aparelho.** A compilação no Odin 2 funciona e o jogo já aparece na tela. Esta versão
-> deixa os tradutores de shader na prioridade mínima: no primeiro boot eles tomavam a CPU do jogo (travadas de
-> 0,6 a 2,5 s). Ainda há picos de ~50–65 ms depois dos shaders prontos, em investigação.
+> **Pré-release em teste no aparelho.** Novidades: menu inicial e tela de **Configurações** (vídeo e exibição) no
+> estilo do menu do GTA V, antes de abrir o jogo; filtro anisotrópico nas opções; e **atualizar o app não pede
+> mais outra compilação do jogo** quando a parte que o jogo usa não mudou (instale por cima da v0.2.2/v0.2.3).
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.

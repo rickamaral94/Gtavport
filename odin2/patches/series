@@ -16,3 +16,5 @@ gtav        0012-app-compilar-no-aparelho.patch
 gtav        0013-shaders-primeira-vez-aviso-e-mais-tradutores.patch
 gtav        0014-superficie-android-e-shaders-prioritarios.patch
 gtav        0015-tradutores-de-shader-em-prioridade-baixa.patch
+gtav        0016-anisotropico-nas-configuracoes.patch
+gtav        0017-menu-inicial-e-configuracoes.patch

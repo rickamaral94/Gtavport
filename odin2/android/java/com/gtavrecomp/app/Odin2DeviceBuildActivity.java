@@ -28,6 +28,8 @@ import android.widget.TextView;
  * Usar um pack feito no PC fica como opção avançada (a tela de setup do upstream).
  */
 public class Odin2DeviceBuildActivity extends Activity {
+    /** Abrir esta tela mesmo com o jogo já compilado (Reinstalar / recompilar no menu inicial). */
+    static final String EXTRA_BUILD = "com.gtavport.BUILD";
     private static final String[] LABELS = {"Disc 1 (Install)", "Disc 2 (Play)", "Title Update 27 (tu00000009_00000000)"};
     private final Uri[] picked = new Uri[3];
     private final TextView[] pickedText = new TextView[3];
@@ -41,6 +43,12 @@ public class Odin2DeviceBuildActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        // Jogo já compilado e nenhuma build rodando: o app abre no menu inicial (estilo GTA V).
+        if (!getIntent().getBooleanExtra(EXTRA_BUILD, false) && !Odin2DeviceBuild.running && Odin2DeviceBuild.installed(this)) {
+            startActivity(new Intent(this, Odin2MenuActivity.class));
+            finish();
+            return;
+        }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         prefs = getSharedPreferences("odin2_device_build", MODE_PRIVATE);
         for (int i = 0; i < 3; i++) {
@@ -81,7 +89,7 @@ public class Odin2DeviceBuildActivity extends Activity {
         status = text("", 15, Color.rgb(255, 210, 120));
         box.addView(status);
         play = button("Jogar", v -> {
-            startActivity(new Intent(this, GameActivity.class));
+            startActivity(new Intent(this, Odin2MenuActivity.class));
             finish();
         });
         play.setVisibility(View.GONE);
@@ -94,6 +102,7 @@ public class Odin2DeviceBuildActivity extends Activity {
             startActivity(new Intent().setClassName(this, "com.gtavrecomp.app.SetupActivity")
                     .putExtra("com.gtavrecomp.app.SETUP", true).putExtra("odin2_pc", true));
         }));
+        box.addView(button("Configurações de vídeo…", v -> startActivity(new Intent(this, Odin2SettingsActivity.class))));
         box.addView(button("Driver gráfico…", v -> startActivity(new Intent(this, Odin2DriverActivity.class))));
         box.addView(button("Logs de desempenho…", v -> startActivity(new Intent(this, Odin2PerfLogsActivity.class))));
         ScrollView sv = new ScrollView(this);
@@ -106,6 +115,7 @@ public class Odin2DeviceBuildActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (start == null) return;  // redirecionou para o menu no onCreate
         poll();
     }
 

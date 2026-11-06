@@ -55,6 +55,12 @@ grep -q '1u << semanticIndex' "$T/shader_common.android.h" && ! grep -q 'RawBuff
 (cd "$T" && find . -type f | sort | xargs sha256sum | sha256sum | cut -c1-16) > "$T/toolroot.version"
 (cd "$T" && zip -q -r -X "$OUT/assets/gtavport-toolroot.zip" .)
 cp "$T/toolroot.version" "$OUT/assets/gtavport-toolroot.version"  # o app compara antes de extrair
+# Chave da biblioteca do jogo (odin2/abi): o app só pede outra compilação quando ela muda.
+SDK_LIB=$G/rexglue-sdk/out/install/android-arm64/lib
+ABI=$("$ROOT/odin2/abi/game_abi.sh" "$T/toolroot.version" "$L/librexglue.so" "$L/libclang.so" "$L/libld.lld.so" \
+      "$G/build/android-dll/libgtav_fast.so" "$SDK_LIB/librexruntime.so")
+{ echo "abi $ABI"; awk -v k="$ABI" '$1 == k { print "compat " $2 }' "$ROOT/odin2/abi/compat-shells.txt"; } \
+  > "$OUT/assets/gtavport-game-abi.txt"
 
 # Todo DT_NEEDED das libs novas está no APK ou é do sistema.
 R=$(ls "$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf 2>/dev/null || ls ~/android-tools/android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf)
@@ -67,3 +73,4 @@ for so in "$L"/*.so; do
 done
 du -sh "$L" "$OUT/assets/gtavport-toolroot.zip"
 echo "toolroot $(cat "$T/toolroot.version")"
+echo "game abi: $(tr '\n' ' ' < "$OUT/assets/gtavport-game-abi.txt")"

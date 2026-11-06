@@ -83,28 +83,105 @@ public final class Odin2DeviceBuild {
         }
     }
 
+    static final String ABI_ASSET = "gtavport-game-abi.txt";
+    private static volatile Boolean installedCache;
+
     /**
-     * O jogo já está pronto para este APK: dados instalados e files/libgtav_game.so feita para esta
-     * libgtav_fast.so (o mesmo critério da tela de setup: a linha "shell" do pack.txt).
+     * O jogo já está pronto para este APK: dados instalados e files/libgtav_game.so compatível com esta
+     * libgtav_fast.so. Compatível = mesmo hash (o critério da tela de setup, linha "shell" do pack.txt) ou
+     * mesma chave de interface (linha "abi", odin2/abi/game_abi.sh) ou uma libgtav_fast.so de release
+     * anterior com a mesma chave (linhas "compat" do asset). Nos dois últimos casos o pack.txt passa a
+     * apontar para esta libgtav_fast.so: atualizar o app não pede outra compilação do jogo.
      */
     static boolean installed(Context c) {
+        Boolean cached = installedCache;
+        if (cached != null) return cached;
+        boolean ok = checkInstalled(c);
+        installedCache = ok;
+        return ok;
+    }
+
+    static void invalidateInstalled() {
+        installedCache = null;
+    }
+
+    private static boolean checkInstalled(Context c) {
         try {
             File ext = c.getExternalFilesDir(null);
             if (ext == null || !new File(ext, "data/data_installed.txt").isFile()) return false;
             if (!new File(c.getFilesDir(), "libgtav_game.so").isFile()) return false;
-            String shell = null;
-            for (String l : new String(Files.readAllBytes(new File(c.getFilesDir(), "pack/pack.txt").toPath()),
-                    StandardCharsets.UTF_8).split("\n")) {
+            File packTxt = new File(c.getFilesDir(), "pack/pack.txt");
+            String text = new String(Files.readAllBytes(packTxt.toPath()), StandardCharsets.UTF_8);
+            String shell = null, abi = null;
+            for (String l : text.split("\n")) {
                 if (l.startsWith("shell ")) shell = l.substring(6).trim();
+                if (l.startsWith("abi ")) abi = l.substring(4).trim();
             }
-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
-            md.update(Files.readAllBytes(new File(c.getApplicationInfo().nativeLibraryDir, "libgtav_fast.so").toPath()));
-            StringBuilder hex = new StringBuilder();
-            for (byte b : md.digest()) hex.append(String.format("%02x", b));
-            return hex.toString().equals(shell);
+            String mine = sha256(new File(c.getApplicationInfo().nativeLibraryDir, "libgtav_fast.so"));
+            if (mine.equals(shell)) return true;
+            String[] want = abiAsset(c);  // {abi, compat...}
+            if (want == null || shell == null) return false;
+            boolean same = want[0].equals(abi);
+            for (int i = 1; i < want.length && !same; i++) same = want[i].equals(shell);
+            if (!same) return false;
+            StringBuilder out = new StringBuilder();
+            for (String l : text.split("\n")) {
+                if (l.isEmpty() || l.startsWith("shell ") || l.startsWith("abi ")) continue;
+                out.append(l).append('\n');
+            }
+            out.append("shell ").append(mine).append('\n').append("abi ").append(want[0]).append('\n');
+            Files.write(packTxt.toPath(), out.toString().getBytes(StandardCharsets.UTF_8));
+            Log.i(TAG, "biblioteca do jogo reaproveitada (abi " + want[0] + "): não precisa compilar de novo");
+            return true;
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /** {chave abi deste APK, sha256 de libgtav_fast.so antigas compatíveis...}; null sem o asset. */
+    static String[] abiAsset(Context c) {
+        try (InputStream in = c.getAssets().open(ABI_ASSET)) {
+            java.util.ArrayList<String> v = new java.util.ArrayList<>();
+            v.add(null);
+            for (String l : new String(in.readAllBytes(), StandardCharsets.UTF_8).split("\n")) {
+                l = l.trim();
+                if (l.startsWith("abi ")) v.set(0, l.substring(4).trim());
+                else if (l.startsWith("compat ")) v.add(l.substring(7).trim());
+            }
+            return v.get(0) == null ? null : v.toArray(new String[0]);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Depois de uma build no aparelho: grava a chave no pack.txt (a próxima versão do app a reconhece). */
+    private static void recordAbi(Context c) {
+        try {
+            String[] want = abiAsset(c);
+            File packTxt = new File(c.getFilesDir(), "pack/pack.txt");
+            if (want == null || !packTxt.isFile()) return;
+            StringBuilder out = new StringBuilder();
+            for (String l : new String(Files.readAllBytes(packTxt.toPath()), StandardCharsets.UTF_8).split("\n")) {
+                if (l.isEmpty() || l.startsWith("abi ")) continue;
+                out.append(l).append('\n');
+            }
+            out.append("abi ").append(want[0]).append('\n');
+            Files.write(packTxt.toPath(), out.toString().getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            Log.w(TAG, "recordAbi: " + e);
+        }
+    }
+
+    static String sha256(File f) throws Exception {
+        java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+        try (InputStream in = new java.io.FileInputStream(f)) {
+            byte[] buf = new byte[1 << 16];
+            int n;
+            while ((n = in.read(buf)) > 0) md.update(buf, 0, n);
+        }
+        StringBuilder hex = new StringBuilder();
+        for (byte b : md.digest()) hex.append(String.format("%02x", b));
+        return hex.toString();
     }
 
     /** Roda a build inteira (na thread do serviço). null = concluída. */
@@ -124,6 +201,8 @@ public final class Odin2DeviceBuild {
             String err = b.nativeBuild(root.getAbsolutePath(), c.getApplicationInfo().nativeLibraryDir,
                     c.getExternalFilesDir(null).getAbsolutePath(), c.getFilesDir().getAbsolutePath(), disc1, disc2, tu);
             error = err;
+            if (err == null) recordAbi(c);
+            invalidateInstalled();
             if (err == null) appendLog("Concluído.");
             else appendLog("Parou: " + err);
             return err;
