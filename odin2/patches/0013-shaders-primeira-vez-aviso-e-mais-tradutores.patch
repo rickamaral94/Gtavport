@@ -1,0 +1,122 @@
+--- a/gtav/src/native/shader_compiler.h
++++ b/gtav/src/native/shader_compiler.h
+@@ -15,5 +15,7 @@
+ 
+ // The background compiler found or wrote <name>.spv (no disk access).
+ bool ShaderOnDisk(const std::string& name);
++// Gtavport: shaders translated since start and still waiting or in translation (on-screen notice).
++void ShaderQueueStatus(uint32_t* done, uint32_t* pending);
+ 
+ }  // namespace gtav::native
+--- a/gtav/src/native/shader_compiler.cpp
++++ b/gtav/src/native/shader_compiler.cpp
+@@ -63,6 +63,7 @@
+ std::unordered_set<std::string> g_seen;
+ std::unordered_set<std::string> g_present;  // .spv on disk: found at intake or compiled since
+ std::atomic<uint32_t> g_ok{0}, g_failed{0};
++std::atomic<uint32_t> g_busy{0};  // Gtavport: shaders being translated right now
+ bool g_started = false;
+ // New shaders arrive on game threads (the D3D create hooks). The disk checks and the container
+ // write happen on an intake thread: on the busy USB disk each exists() / fopen took ~50 ms, on
+@@ -271,8 +272,11 @@
+       g_cv.wait(lock, [] { return !g_queue.empty(); });
+       name = std::move(g_queue.front());
+       g_queue.pop_front();
++      g_busy.fetch_add(1);
+     }
+-    if (Compile(name)) {
++    const bool compiled = Compile(name);
++    g_busy.fetch_sub(1);
++    if (compiled) {
+       {
+         std::lock_guard lock(g_mutex);
+         g_present.insert(name);
+@@ -295,6 +299,12 @@
+     // precompiled set; a first run with no SPIR-V compiles every shader the game creates, so
+     // machines with more cores get more (a third of them).
+     int workers = std::max(2, int(std::thread::hardware_concurrency()) / 3);
++    // Gtavport: on the phone every shader is translated here, most of them in the first minutes
++    // while the game sits in its loading screens (the PC had them precompiled). More workers then:
++    // all cores but two (6 on a Snapdragon 8 Gen 2); GTAVPORT_SHADER_WORKERS overrides.
++    if (Device().on) workers = std::max(2, int(std::thread::hardware_concurrency()) - 2);
++    if (const char* w = std::getenv("GTAVPORT_SHADER_WORKERS"); w && std::atoi(w) > 0) workers = std::atoi(w);
++    REXLOG_INFO("[native] shader compiler: {} workers", workers);
+     for (int i = 0; i < workers; i++) std::thread(Worker).detach();
+   }
+   g_queue.push_back(name);
+@@ -305,6 +315,12 @@
+ 
+ uint64_t CompileGeneration() { return g_generation.load(std::memory_order_acquire); }
+ 
++void ShaderQueueStatus(uint32_t* done, uint32_t* pending) {
++  std::lock_guard lock(g_mutex);
++  *done = g_ok.load();
++  *pending = uint32_t(g_queue.size()) + g_busy.load() + uint32_t(g_intake.size());
++}
++
+ bool ShaderOnDisk(const std::string& name) {
+   std::lock_guard lock(g_mutex);
+   return g_present.count(name) != 0;
+--- a/gtav/src/native/menu.cpp
++++ b/gtav/src/native/menu.cpp
+@@ -7,6 +7,7 @@
+ 
+ #include "paths.h"
+ #include "odin2_perf.h"  // Gtavport: odin2/perf
++#include "shader_compiler.h"
+ 
+ #include <imgui.h>
+ #include <rex/cvar.h>
+@@ -15,6 +16,7 @@
+ #include <algorithm>
+ #include <atomic>
+ #include <cmath>
++#include <cstdio>
+ #include <cstdlib>
+ #include <fstream>
+ #include <mutex>
+@@ -337,7 +339,12 @@
+ 
+ ImDrawData* Frame(uint32_t w, uint32_t h, uint32_t fps, double frame_ms) {
+   const bool touch_overlay = touch::Visible();
+-  if (!g_open && !touch_overlay) return nullptr;
++  // Gtavport: while shaders are being translated on the phone (first run), say so on screen: the
++  // game's draws without SPIR-V are skipped, which otherwise looks like a black screen.
++  uint32_t shaders_done = 0, shaders_pending = 0;
++  ShaderQueueStatus(&shaders_done, &shaders_pending);
++  const bool shader_notice = shaders_pending > 0;
++  if (!g_open && !touch_overlay && !shader_notice) return nullptr;
+   EnsureContext(h);
+   ImGuiContext* previous = ImGui::GetCurrentContext();
+   ImGui::SetCurrentContext(g_context);
+@@ -364,6 +371,16 @@
+   ImGui::NewFrame();
+   if (g_open) Build(fps, frame_ms);
+   if (touch_overlay) touch::Draw(ImGui::GetForegroundDrawList(), float(w), float(h));
++  if (shader_notice) {
++    char line[160];
++    std::snprintf(line, sizeof line, "Preparando os shaders deste aparelho: %u prontos, %u na fila (só na primeira vez)",
++                  shaders_done, shaders_pending);
++    ImDrawList* dl = ImGui::GetForegroundDrawList();
++    const ImVec2 size = ImGui::CalcTextSize(line);
++    const float pad = 8.0f * g_scale, y = float(h) - size.y - 3 * pad;
++    dl->AddRectFilled(ImVec2(pad, y - pad), ImVec2(pad * 3 + size.x, y + size.y + pad), IM_COL32(0, 0, 0, 170), 6.0f);
++    dl->AddText(ImVec2(pad * 2, y), IM_COL32(255, 220, 140, 255), line);
++  }
+   ImGui::Render();
+   ImDrawData* data = ImGui::GetDrawData();
+   if (previous && previous != g_context) ImGui::SetCurrentContext(previous);
+--- a/gtav/src/native/backend.cpp
++++ b/gtav/src/native/backend.cpp
+@@ -5973,7 +5973,10 @@
+   }
+   if (s.converter_pool) s.converter_pool->Finish();  // the frame's vertex data is in upload memory
+   const bool lost = s.lost_pipeline || s.lost_vs || s.lost_ps;
+-  if (lost)
++  // Gtavport: the first 10, then 1 in 100 (on a phone's first run, while its shaders are translated,
++  // every frame lost draws for minutes: megabytes of log written from the render thread).
++  static uint64_t lost_logged = 0;
++  if (lost && (++lost_logged <= 10 || lost_logged % 100 == 0))
+     REXLOG_INFO("[native] frame {} lost draws: {} pipelines compiling, {} vertex / {} pixel shaders not ready; first: {}",
+                 f.index, s.lost_pipeline, s.lost_vs, s.lost_ps, s.lost_first);
+   s.lost_pipeline = s.lost_vs = s.lost_ps = 0;
