@@ -1,9 +1,9 @@
 > [!WARNING]
-> **Pré-release em teste no aparelho.** Nesta versão: **Idioma do jogo** (Configurações > Exibição, ou no menu do
-> jogo): português do Brasil e outros, no próximo início; **Medir desempenho** mais robusto (o pedido feito no app
-> fica até sair um relatório, mesmo que o jogo seja aberto e fechado antes; começa mesmo com quadros de loading no
-> meio). Antes: Medir desempenho, ícone/nome Gtavport, menu e Configurações no estilo GTA V, Sair do jogo pelo menu,
-> atualizar sem recompilar o jogo.
+> **Pré-release em teste no aparelho.** Nesta versão: o app **abre sempre no menu inicial** (nunca direto no jogo);
+> no menu, **Logs de desempenho** (Desligado / No próximo jogo / Em todo início) grava os **primeiros 60 s de jogo**
+> (sem menus, loading nem vídeos) e salva `perf-diag-<data>.txt` na pasta `logs`, junto do `gtav.log`; **Idioma do
+> jogo** (Configurações > Exibição): português do Brasil e outros. Antes: Medir desempenho, ícone/nome Gtavport,
+> menu e Configurações no estilo GTA V, Sair do jogo pelo menu, atualizar sem recompilar o jogo.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.

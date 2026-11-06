@@ -50,6 +50,38 @@ public class Odin2MenuActivity extends Odin2GtaActivity {
         }
     }
 
+    private Item logsItem;
+
+    private java.io.File requestFile() {
+        return new java.io.File(getExternalFilesDir(null), "diag_request.txt");
+    }
+
+    private String readRequest() {
+        try {
+            return new String(java.nio.file.Files.readAllBytes(requestFile().toPath()), java.nio.charset.StandardCharsets.UTF_8).trim();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    @Override
+    protected void onChanged(Item item) {
+        if (item != logsItem) return;
+        try {
+            if ("off".equals(item.value())) requestFile().delete();
+            else java.nio.file.Files.write(requestFile().toPath(),
+                    ("always".equals(item.value()) ? "60 always" : "60").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            android.widget.Toast.makeText(this, "Não foi possível salvar: " + e.getMessage(), android.widget.Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override
+    protected void onRestart() {
+        super.onRestart();
+        rebuild();  // o pedido "no próximo jogo" some depois do relatório
+    }
+
     @Override
     protected void buildTabs() {
         Tab m = new Tab("Jogo");
@@ -62,7 +94,16 @@ public class Odin2MenuActivity extends Odin2GtaActivity {
                 () -> startActivity(new Intent(this, Odin2SettingsActivity.class))));
         m.add(new Item("Driver gráfico", "Driver do sistema (Qualcomm) ou um Turnip importado.",
                 () -> startActivity(new Intent(this, Odin2DriverActivity.class))));
-        m.add(new Item("Logs de desempenho", "Sessões gravadas na seção Performance do jogo: gargalos, FPS, temperatura.",
+        // Grava os primeiros 60 s de JOGO (sem menus, loading nem vídeos) e salva em logs/perf-diag-<data>.txt, a
+        // mesma pasta do gtav.log (odin2_diag.cpp). O pedido é o arquivo diag_request.txt, lido no início do jogo.
+        String cur = readRequest();
+        int idx = cur.endsWith("always") ? 2 : cur.isEmpty() || cur.startsWith("0") ? 0 : 1;
+        logsItem = m.add(new Item("Logs de desempenho",
+                "Grava os primeiros 60 s de jogo (só jogo: sem menus, loading nem vídeos; começa após 5 s jogando) e salva "
+                        + "o relatório na pasta logs, junto do gtav.log: perf-diag-<data>.txt. Traz fps, travadas, GPU, clocks, "
+                        + "temperatura, CPU de cada thread e as funções do jogo onde o tempo vai. Um aviso no canto mostra a gravação.",
+                new String[] {"off", "next", "always"}, new String[] {"Desligado", "No próximo jogo", "Em todo início"}, idx));
+        m.add(new Item("Ver logs gravados", "Os relatórios e as gravações, com exportação para Downloads.",
                 () -> startActivity(new Intent(this, Odin2PerfLogsActivity.class))));
         m.add(new Item("Reinstalar / recompilar", "Volta à tela de instalação: trocar os discos ou o Title Update, ou compilar o jogo de novo.",
                 () -> startActivity(new Intent(this, Odin2DeviceBuildActivity.class).putExtra(Odin2DeviceBuildActivity.EXTRA_BUILD, true))));

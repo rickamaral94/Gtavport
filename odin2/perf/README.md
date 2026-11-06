@@ -49,11 +49,11 @@ aparelho:** quais sensores o SELinux libera no Odin 2 e o custo da coleta ainda 
 Ideia e formato do diagnóstico do TOTK/BOTW (`rickamaral94/Totknspcxi`, `runtime/diag.c`, `docs/DESEMPENHO-DIAG.md`;
 MIT, LAS Recomp/Peiikai), medido de fora das threads do jogo (sem ganchos no kernel emulado do ReXGlue).
 
-- **Pedir:** menu do jogo (Start/Voltar) > Performance > *Medir desempenho (60 s)* / *(10 min)*; ou, no app,
+- **Pedir:** menu inicial do app > *Logs de desempenho* (próximo jogo / todo início: os primeiros 60 s de jogo); menu do jogo (Start/Voltar) > Performance > *Medir desempenho (60 s)* / *(10 min)*; ou, no app,
   Configurações > Desempenho > *Medir desempenho no próximo jogo* (grava `diag_request.txt`, lido e apagado no início).
 - **Quando:** depois de 5 s seguidos de jogo (quadro com 250+ draws, menu fechado); conta só tempo de jogo; um aviso
   no canto mostra a espera e o progresso.
-- **Relatório:** linhas `[diag]` no `gtav.log` e `logs/perf/perf-diag-<data>.txt` (listado em Logs de desempenho):
+- **Relatório:** linhas `[diag]` no `gtav.log`, `logs/perf-diag-<data>.txt` (a pasta logs, junto do gtav.log) e uma cópia em `logs/perf/` (listada em Ver logs gravados):
   `run:` (GPU, driver, configurações), `summary:` (fps, p50/p95/p99/máx, quadros >50/>100/>400 ms, GPU por quadro,
   MHz médio de cada cluster e da GPU, temperatura, térmico, headroom), o renderer por quadro e o gargalo, o custo do
   amostrador (blocos de 5 s ligado/desligado), as 14 threads que mais usam CPU (CPU própria; % em R/S/D; fila sem

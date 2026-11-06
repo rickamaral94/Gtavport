@@ -148,7 +148,7 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
         File req = new File(getExternalFilesDir(null), "diag_request.txt");
         int pending = 0;
         try {
-            pending = Integer.parseInt(new String(Files.readAllBytes(req.toPath()), StandardCharsets.UTF_8).trim());
+            pending = Integer.parseInt(new String(Files.readAllBytes(req.toPath()), StandardCharsets.UTF_8).trim().split("\\s+")[0]);
         } catch (Exception ignored) {
         }
         diagItem = p.add(new Item("Medir desempenho no próximo jogo",

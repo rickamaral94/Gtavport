@@ -1,0 +1,30 @@
+--- a/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
++++ b/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
+@@ -84,13 +84,11 @@
+         // "Run setup again" (long-press the app icon) opens this screen even when the game is
+         // installed: to choose a newer pack (README: objects missing -> Build for Android again).
+         boolean again = getIntent() != null && getIntent().getBooleanExtra(EXTRA_SETUP, false);
+-        if (!again && packCurrent() == null && nativeIsDataInstalled(home().getAbsolutePath())) {
+-            startGame();
+-            return;
+-        }
+         // Gtavport (Fase 1): this APK installs and builds the game on the device itself, no PC. Its
+         // setup is Odin2DeviceBuildActivity; this screen (a pack made by a PC) only on request
+-        // ("odin2_pc", from that screen's advanced option).
++        // ("odin2_pc", from that screen's advanced option). Checked before the upstream auto-start
++        // below: the app always opens on its menu (Odin2DeviceBuildActivity goes on to Odin2MenuActivity
++        // when the game is built), never straight into the game.
+         if (getIntent() == null || !getIntent().getBooleanExtra("odin2_pc", false)) {
+             try {
+                 Class<?> dev = Class.forName("com.gtavrecomp.app.Odin2DeviceBuild");
+@@ -103,6 +101,10 @@
+                 // APK do upstream: só o fluxo pelo PC
+             }
+         }
++        if (!again && packCurrent() == null && nativeIsDataInstalled(home().getAbsolutePath())) {
++            startGame();
++            return;
++        }
+         for (int i = 0; i < 4; i++) {
+             String s = prefs.getString("uri" + i, null);
+             if (s != null) picked[i] = Uri.parse(s);

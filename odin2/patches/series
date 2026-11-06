@@ -24,3 +24,4 @@ gtav        0020-sair-do-jogo-pelo-menu.patch
 gtav        0021-aviso-medir-desempenho.patch
 rexglue-sdk 0022-idioma-do-jogo.patch
 gtav        0023-idioma-nas-configuracoes.patch
+gtav        0024-abrir-sempre-no-menu.patch

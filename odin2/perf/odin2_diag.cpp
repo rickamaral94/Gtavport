@@ -57,7 +57,7 @@ using Clock = std::chrono::steady_clock;
 using namespace diag;
 
 constexpr double kWarmupMs = 5000;       // jogo contínuo antes de começar
-constexpr uint32_t kGameplayDraws = 100;  // menos que isso: tela de loading, menu, vídeo
+constexpr uint32_t kGameplayDraws = 300;  // menos que isso: tela de loading, menu, vídeo (no jogo: 580-1000+)
 constexpr int kTargets = 4;               // threads amostradas por PC
 
 enum class State { kIdle, kWaiting, kRecording, kReporting };
@@ -69,9 +69,8 @@ double g_warm_ms = 0;          // jogo contínuo acumulado na espera
 double g_game_ms = 0;          // jogo medido
 Clock::time_point g_rec_start, g_armed_at;
 std::string g_last_report;     // caminho do último relatório (para o menu)
-bool g_from_file = false;      // pedido da tela Configurações: o arquivo só sai quando houver relatório
-double g_armed_frames_ms = 0;  // tempo de quadros desde o pedido (sem jogo confirmado em 120 s, mede assim mesmo)
-bool g_unconfirmed = false;
+bool g_from_file = false;      // pedido do app: o arquivo só sai quando houver relatório
+bool g_always = false;         // "em todo início": o arquivo fica
 bool g_menu_open_hint = false;
 
 // Quadros da medição
@@ -206,9 +205,6 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
     REXLOG_INFO("[diag] {}", s);
   };
   line("run: " + RunDescription() + " | medição " + std::to_string(g_seconds) + " s de jogo");
-  if (g_unconfirmed)
-    line("aviso: 120 s sem 5 s de jogo confirmados (cena com " + std::to_string(kGameplayDraws) +
-         "+ draws, menu fechado); medido assim mesmo, pode incluir loading ou menus");
 
   std::vector<double> iv, iv_on, iv_off, rec, idle, gw;
   double game_ms = 0;
@@ -331,13 +327,16 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
     line("funções: nenhuma amostra de PC (as threads amostradas não estavam rodando ou o sinal falhou)");
   }
 
+  // Na pasta logs/ (a que já se exporta com o gtav.log) e uma cópia em logs/perf (tela Logs de desempenho).
   std::error_code ec;
-  const std::filesystem::path dir = ExeDir() / "logs" / "perf";
-  std::filesystem::create_directories(dir, ec);
-  const std::filesystem::path file = dir / ("perf-diag-" + Timestamp() + ".txt");
-  std::ofstream(file) << "# Gtavport — Medir desempenho (odin2/perf/odin2_diag.cpp)\n" << out.str();
+  const std::string name = "perf-diag-" + Timestamp() + ".txt";
+  const std::string text = "# Gtavport — Medir desempenho (odin2/perf/odin2_diag.cpp)\n" + out.str();
+  const std::filesystem::path logs = ExeDir() / "logs", file = logs / name;
+  std::filesystem::create_directories(logs / "perf", ec);
+  std::ofstream(file) << text;
+  std::ofstream(logs / "perf" / name) << text;
   REXLOG_INFO("[diag] relatório: {}", file.string());
-  if (g_from_file) std::filesystem::remove(ExeDir() / "diag_request.txt", ec);
+  if (g_from_file && !g_always) std::filesystem::remove(ExeDir() / "diag_request.txt", ec);
   std::lock_guard lock(g_mutex);
   g_last_report = file.string();
 }
@@ -451,14 +450,13 @@ void Run() {
   }
 }
 
-void Arm(int seconds, const char* why, bool from_file) {
+void Arm(int seconds, const char* why, bool from_file, bool always = false) {
   State expected = State::kIdle;
   if (!g_state.compare_exchange_strong(expected, State::kWaiting)) return;
   {
     std::lock_guard lock(g_mutex);
     g_from_file = from_file;
-    g_armed_frames_ms = 0;
-    g_unconfirmed = false;
+    g_always = always;
     g_seconds = seconds;
     g_warm_ms = 0;
     g_game_ms = 0;
@@ -479,33 +477,34 @@ void DiagCheckRequestFile() {
   std::error_code ec;
   const std::filesystem::path f = ExeDir() / "diag_request.txt";
   if (!std::filesystem::exists(f, ec)) return;
+  // "<segundos>" (só no próximo jogo) ou "<segundos> always" (em todo início). O arquivo fica até sair um
+  // relatório: um início do jogo que fecha antes não gasta o pedido.
   int seconds = 0;
-  std::ifstream(f) >> seconds;
-  // O arquivo fica até sair um relatório: um início do jogo que fecha antes não gasta o pedido.
-  if (seconds > 0) Arm(std::min(seconds, 3600), "pedido na tela Configurações do app", true);
+  std::string mode;
+  std::ifstream(f) >> seconds >> mode;
+  if (seconds > 0)
+    Arm(std::min(seconds, 3600), mode == "always" ? "logs de desempenho em todo início (app)" : "pedido no app", true,
+        mode == "always");
   else std::filesystem::remove(f, ec);
 }
 
 void DiagOnFrame(const FrameSample& s, bool menu_open) {
   const State st = g_state.load(std::memory_order_relaxed);
   if (st != State::kWaiting && st != State::kRecording) return;
-  const bool game = !menu_open && s.draws >= kGameplayDraws && s.interval_ms < 5000;
+  const bool game = !menu_open && s.draws >= kGameplayDraws && s.interval_ms < 5000;  // um quadro de 5 s+ é loading
   std::lock_guard lock(g_mutex);
   if (st == State::kWaiting) {
     // Jogo acumulado: o menu aberto zera; quadros leves (loading, um corte) só não contam. A ~13 fps um
     // único quadro leve zerava a espera e a medição nunca começava.
     if (menu_open) g_warm_ms = 0;
     else if (game) g_warm_ms += s.interval_ms;
-    if (!menu_open) g_armed_frames_ms += std::min(s.interval_ms, 1000.0);
-    const bool fallback = g_armed_frames_ms >= 120000;
-    if (g_warm_ms >= kWarmupMs || fallback) {
-      g_unconfirmed = g_warm_ms < kWarmupMs;
+    if (g_warm_ms >= kWarmupMs) {
       g_rec_start = Clock::now();
       g_state = State::kRecording;
     }
     return;
   }
-  if (menu_open || (!game && !g_unconfirmed)) {
+  if (!game) {  // só jogo: menus (o nosso e telas com poucos draws), loading e vídeos ficam fora
     g_nongame_frames++;
     return;
   }
