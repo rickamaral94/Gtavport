@@ -1,0 +1,25 @@
+--- a/gtav/src/native/shader_compiler.cpp
++++ b/gtav/src/native/shader_compiler.cpp
+@@ -8,6 +8,9 @@
+ // skipped renders a few hundred milliseconds later and the result persists for later runs.
+ 
+ #include "shader_compiler.h"
++#if defined(__linux__) || defined(__ANDROID__)
++#include <sys/resource.h>
++#endif
+ 
+ #include "paths.h"
+ 
+@@ -269,6 +272,12 @@
+ }
+ 
+ void Worker() {
++#if defined(__linux__) || defined(__ANDROID__)
++  // Gtavport: lowest priority (nice 19, per thread on Linux; the translators it starts inherit it).
++  // At the default priority 6 workers took the cores from the game threads: 0.6-2.5 s freezes
++  // while the first boot translated its shaders (Windows already starts them below normal).
++  setpriority(PRIO_PROCESS, 0, 19);
++#endif
+   for (;;) {
+     std::string name;
+     {
