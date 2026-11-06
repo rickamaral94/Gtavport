@@ -1,7 +1,8 @@
 > [!WARNING]
-> **Pré-release, ainda não testada no aparelho.** Tudo foi compilado e verificado no CI (build a partir do código,
-> verificação de pureza, testes), mas nenhum destes APKs rodou num Odin 2 até agora. É justamente para isso que
-> esta release existe: para as primeiras medições (`docs/baseline.md`, `docs/etapa-p.md`).
+> **Pré-release em teste no aparelho.** A compilação no Odin 2 já funciona; o jogo abre, mas o primeiro boot ainda
+> fica preto enquanto os shaders são traduzidos. Esta versão corrige o fechamento ao sair e voltar para o jogo
+> (o swap chain era recriado sobre uma janela já liberada pelo Android, com qualquer driver) e traduz primeiro os
+> shaders que a tela está esperando.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.
