@@ -29,6 +29,11 @@ void OnGpuFrame(uint64_t seq, double gpu_ms);
 void SetPassBreakdown(std::vector<std::pair<std::string, double>> passes, double total_ms);
 void SetDeviceName(const std::string& name);
 
+// Sonda de travadas (odin2_stall.cpp): amostra /proc/self/task a cada 50 ms; num quadro >= 150 ms
+// loga quais threads usaram CPU, quais esperaram disco, MB lidos e as frequências dos núcleos.
+void StartStallProbe();
+void OnHitch(double ms, uint64_t guest_frame);
+
 // Seção no menu (dentro da janela de Settings, thread de render).
 void BuildMenu(float ui_scale);
 

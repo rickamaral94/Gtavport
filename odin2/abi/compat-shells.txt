@@ -2,5 +2,5 @@
 # Formato: <chave abi (game_abi.sh)> <sha256 da libgtav_fast.so> <release>
 # make_device_bundle.sh leva para o APK as linhas cuja chave é a do APK novo: quem compilou o jogo
 # numa dessas releases não precisa compilar de novo.
-dcb2c304859f84a6 f4e8259d2d6913cae43d427b17e1204e291edb910e761bd623012d4b15e53126 v0.2.2-pre1
-dcb2c304859f84a6 2a5ad43d8422e1333ae261e059471cc0691fa6d422087724c07098d3f4ff762c v0.2.3-pre1
+1104e876c0b95b5f f4e8259d2d6913cae43d427b17e1204e291edb910e761bd623012d4b15e53126 v0.2.2-pre1
+1104e876c0b95b5f 2a5ad43d8422e1333ae261e059471cc0691fa6d422087724c07098d3f4ff762c v0.2.3-pre1

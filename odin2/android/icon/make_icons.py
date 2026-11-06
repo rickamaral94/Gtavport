@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Gtavport: ícone do app (arte original "GV", sem marcas da Rockstar) -> res/ do APK.
 
-    python3 -I odin2/android/icon/make_icons.py <saída res/>
+    python3 odin2/android/icon/make_icons.py <saída res/>
 
 Fundo claro em volta da moldura vira transparente; gera mipmap-*/ic_launcher.png (ícone antigo,
 48..192 px) e o ícone adaptativo (Android 8+): fundo preto + frente com a arte em 74 dp de 108 dp.

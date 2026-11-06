@@ -15,7 +15,7 @@ rm -rf "$D" && mkdir -p "$D"
 # 1) pasta android/ do pacote do PC, com o APK do Gtavport (make_shell.sh do upstream).
 export ODIN2_JAVA=$ROOT/odin2/android/java ODIN2_PACKAGE=com.gtavport.app
 # Ícone do app (arte original "GV"): res/ gerado de odin2/android/icon.
-rm -rf "$ROOT/build/icon-res" && python3 -I "$ROOT/odin2/android/icon/make_icons.py" "$ROOT/build/icon-res"
+rm -rf "$ROOT/build/icon-res" && python3 "$ROOT/odin2/android/icon/make_icons.py" "$ROOT/build/icon-res"
 export ODIN2_RES=$ROOT/build/icon-res
 # Fase 1 (compilar no aparelho): libs de build + toolroot (android-ondevice/device/make_device_bundle.sh);
 # sem o pacote, sai o APK só com o fluxo pelo PC.

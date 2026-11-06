@@ -1,0 +1,18 @@
+--- a/gtav/src/native/renderer.cpp
++++ b/gtav/src/native/renderer.cpp
+@@ -613,6 +613,7 @@
+     }
+     REXLOG_INFO("[native] using {}", device_->getDescription().name);
+     perf::SetDeviceName(device_->getDescription().name);
++    perf::StartStallProbe();  // Gtavport (odin2/perf): o que o processo fazia em cada travada
+     {
+       const auto& caps = device_->getCapabilities();
+       REXLOG_INFO("[native] device caps: geometry shader {}, descriptor indexing {}, scalar layout {}, "
+@@ -1362,6 +1363,7 @@
+                   interval, frame.index, ms(record_end - record_start), ms(wait_end - wait_start),
+                   st.pipelines_created, st.textures, st.draws, st.shader_ms, st.pipeline_ms, st.texture_ms,
+                   st.resolve_ms);
++      perf::OnHitch(interval, frame.index);
+     }
+     timing_.acquire_sum += ms(acquire_end - main_submit_end);
+     timing_.submit_sum += ms(submit_end - record_end);

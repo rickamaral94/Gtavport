@@ -49,8 +49,12 @@ jobs:
             work/gtav/rexglue-sdk/thirdparty/sdl3/android-project/app/src/main/java \
             work/gtav/tools/android/app/java odin2/android/java -name '*.java')
           "$ANDROID_HOME/build-tools/36.0.0/d8" --release --min-api 30 --lib "$JAR" --output out $(find out/classes -name '*.class')
+          python3 -c "import PIL" 2>/dev/null || python3 -m pip install -q --user --break-system-packages pillow
+          python3 odin2/android/icon/make_icons.py out/res
+          "$ANDROID_HOME/build-tools/36.0.0/aapt2" compile --dir out/res -o out/res.zip
           "$ANDROID_HOME/build-tools/36.0.0/aapt2" link -o out/base.apk -I "$JAR" \
-            --manifest work/gtav/tools/android/app/AndroidManifest.xml --min-sdk-version 30 --target-sdk-version 34
+            --manifest work/gtav/tools/android/app/AndroidManifest.xml --min-sdk-version 30 --target-sdk-version 34 \
+            out/res.zip
       - name: Java do APK de prova
         run: |
           mkdir -p out/probe

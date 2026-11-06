@@ -57,8 +57,7 @@ grep -q '1u << semanticIndex' "$T/shader_common.android.h" && ! grep -q 'RawBuff
 cp "$T/toolroot.version" "$OUT/assets/gtavport-toolroot.version"  # o app compara antes de extrair
 # Chave da biblioteca do jogo (odin2/abi): o app só pede outra compilação quando ela muda.
 SDK_LIB=$G/rexglue-sdk/out/install/android-arm64/lib
-ABI=$("$ROOT/odin2/abi/game_abi.sh" "$T/toolroot.version" "$L/librexglue.so" "$L/libclang.so" "$L/libld.lld.so" \
-      "$G/build/android-dll/libgtav_fast.so" "$SDK_LIB/librexruntime.so")
+ABI=$("$ROOT/odin2/abi/game_abi.sh" "$T/toolroot.version" "$G/build/android-dll/libgtav_fast.so" "$SDK_LIB/librexruntime.so")
 { echo "abi $ABI"; awk -v k="$ABI" '$1 == k { print "compat " $2 }' "$ROOT/odin2/abi/compat-shells.txt"; } \
   > "$OUT/assets/gtavport-game-abi.txt"
 

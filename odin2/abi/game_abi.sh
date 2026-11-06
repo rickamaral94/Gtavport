@@ -1,12 +1,16 @@
 #!/bin/bash
 # Chave de compatibilidade da libgtav_game.so (a biblioteca do jogo compilada no aparelho).
-#   odin2/abi/game_abi.sh <toolroot.version> <librexglue.so> <libclang.so> <libld.lld.so> <libgtav_fast.so> <librexruntime.so>
-# A libgtav_game.so depende só do que entra na compilação dela (toolroot: manifest, hooks, headers;
-# codegen, clang e lld) e dos símbolos que ela importa da libgtav_fast.so e da librexruntime.so.
-# Uma versão nova do app que só mexe no renderer/menu/app tem a mesma chave: o jogo já compilado
-# continua valendo e o app não pede outra compilação (antes ele exigia o mesmo hash da libgtav_fast.so).
+#   odin2/abi/game_abi.sh <toolroot.version> <libgtav_fast.so> <librexruntime.so>
+# Uma libgtav_game.so já compilada continua valendo enquanto não mudarem:
+#   - o toolroot (manifest, partição, hooks, headers com que o código do jogo é compilado);
+#   - os nomes da interface que ela importa (gen_interface.py do upstream): da libgtav_fast.so os
+#     hooks (sub_<endereço>, __imp__sub_*), a ponte gtavfs_* e os rex_* em C; da librexruntime.so
+#     todos os exportados (o runtime só muda com o pin do SDK).
+# O resto dos exportados da libgtav_fast.so (templates do spdlog/fmt, código do renderer) muda a cada
+# versão e o jogo não usa; o compilador também não entra (não muda uma biblioteca já compilada).
+# Antes o app exigia o mesmo hash da libgtav_fast.so: toda versão nova pedia outra compilação.
 set -euo pipefail
-[ $# -eq 6 ] || { echo "uso: $0 <toolroot.version> <librexglue.so> <libclang.so> <libld.lld.so> <libgtav_fast.so> <librexruntime.so>" >&2; exit 2; }
+[ $# -eq 3 ] || { echo "uso: $0 <toolroot.version> <libgtav_fast.so> <librexruntime.so>" >&2; exit 2; }
 NM=${LLVM_NM:-}
 if [ -z "$NM" ]; then
   for c in "${ANDROID_NDK_HOME:-/nonexistent}"/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm \
@@ -16,8 +20,8 @@ if [ -z "$NM" ]; then
 fi
 [ -n "$NM" ] || { echo "llvm-nm não encontrado" >&2; exit 1; }
 {
-  echo "gtavport game abi 1"
+  echo "gtavport game abi 3"
   tr -d '[:space:]' < "$1"; echo
-  for f in "$2" "$3" "$4"; do sha256sum "$f" | cut -c1-64; done
-  for f in "$5" "$6"; do "$NM" -D --defined-only "$f" | awk '{print $NF}' | LC_ALL=C sort; done
+  "$NM" -D --defined-only "$2" | awk '{print $NF}' | grep -E '^(__imp__)?sub_[0-9A-F]{8}$|^gtavfs_[a-z_]+$|^rex_[a-z_]+$' | LC_ALL=C sort
+  "$NM" -D --defined-only "$3" | awk '{print $NF}' | LC_ALL=C sort
 } | sha256sum | cut -c1-16
