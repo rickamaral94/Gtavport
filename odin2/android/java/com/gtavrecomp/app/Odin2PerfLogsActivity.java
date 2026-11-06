@@ -84,12 +84,13 @@ public class Odin2PerfLogsActivity extends Activity {
 
     private void refresh() {
         list.removeAllViews();
-        File[] txts = perfDir().listFiles((d, n) -> n.startsWith("perf_") && n.endsWith(".txt"));
+        // perf_*: gravações da seção Performance; perf-diag-*: relatórios de Medir desempenho.
+        File[] txts = perfDir().listFiles((d, n) -> (n.startsWith("perf_") || n.startsWith("perf-diag-")) && n.endsWith(".txt"));
         if (txts == null || txts.length == 0) {
             list.addView(text("Nenhuma sessão gravada ainda.", 14, Color.GRAY, false));
             return;
         }
-        Arrays.sort(txts, (a, c) -> c.getName().compareTo(a.getName()));  // mais recente primeiro
+        Arrays.sort(txts, (a, c) -> Long.compare(c.lastModified(), a.lastModified()));  // mais recente primeiro
         for (File t : txts) list.addView(session(t));
     }
 
@@ -99,7 +100,7 @@ public class Odin2PerfLogsActivity extends Activity {
         LinearLayout r = new LinearLayout(this);
         r.setOrientation(LinearLayout.VERTICAL);
         r.setPadding(0, dp(10), 0, dp(10));
-        r.addView(text(base.replace("perf_", "sessão ") + (csv.isFile() ? String.format(" · CSV %.1f MB", csv.length() / 1048576.0) : ""),
+        r.addView(text(base.replace("perf-diag-", "Medir desempenho ").replace("perf_", "sessão ") + (csv.isFile() ? String.format(" · CSV %.1f MB", csv.length() / 1048576.0) : ""),
                 16, Color.WHITE, false));
         String summary;
         try {

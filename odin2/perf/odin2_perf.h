@@ -29,6 +29,26 @@ void OnGpuFrame(uint64_t seq, double gpu_ms);
 void SetPassBreakdown(std::vector<std::pair<std::string, double>> passes, double total_ms);
 void SetDeviceName(const std::string& name);
 
+// Últimos sensores lidos pela thread da seção Performance (1 por segundo); -1 = indisponível.
+struct DeviceSample {
+  double gpu_mhz = -1, gpu_busy = -1, gpu_temp = -1;
+  double cpu_mhz[3] = {-1, -1, -1};  // prime, performance, eficiência
+  double headroom = -1;
+  int thermal_status = -1;
+  double rss_mb = -1;
+};
+DeviceSample LatestDevice();
+// Aparelho, driver e configurações numa linha (cabeçalho dos relatórios).
+std::string RunDescription();
+
+// "Medir desempenho" (odin2_diag.cpp, ideia do diagnóstico do TOTK/BOTW).
+void DiagRequest(int seconds);           // menu do jogo
+void DiagCheckRequestFile();             // diag_request.txt deixado pela tela Configurações do app
+void DiagOnFrame(const FrameSample& s, bool menu_open);
+void DiagOnGpu(double gpu_ms);
+std::string DiagStatus();                // "" parado; senão a linha do aviso na tela
+std::string DiagLastReport();
+
 // Sonda de travadas (odin2_stall.cpp): amostra /proc/self/task a cada 50 ms; num quadro >= 150 ms
 // loga quais threads usaram CPU, quais esperaram disco, MB lidos e as frequências dos núcleos.
 void StartStallProbe();

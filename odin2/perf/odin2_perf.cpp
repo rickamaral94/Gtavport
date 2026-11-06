@@ -11,6 +11,7 @@
 #include "odin2_perf.h"
 
 #include "paths.h"
+#include "menu.h"
 
 #include <imgui.h>
 #include <rex/cvar.h>
@@ -503,8 +504,33 @@ void IoLoop() {
 
 }  // namespace
 
+DeviceSample LatestDevice() {
+  std::lock_guard lock(g_mutex);
+  DeviceSample d;
+  d.gpu_mhz = g_sensors.gpu_mhz;
+  d.gpu_busy = g_sensors.gpu_busy;
+  d.gpu_temp = g_sensors.gpu_temp;
+  for (int i = 0; i < 3; i++) d.cpu_mhz[i] = g_sensors.cpu_mhz[i];
+  d.headroom = g_sensors.headroom;
+  d.thermal_status = g_sensors.thermal_status;
+  d.rss_mb = g_sensors.rss_mb;
+  return d;
+}
+
+std::string RunDescription() {
+  std::string device, driver;
+  {
+    std::lock_guard lock(g_mutex);
+    device = g_device;
+    driver = g_driver_json;
+  }
+  return "GPU " + device + " | driver " + (driver.empty() ? std::string("?") : driver) + " | " + Settings() +
+         " | env " + EnvLine();
+}
+
 uint64_t OnFrame(const FrameSample& s) {
   EnsureThread();
+  DiagOnFrame(s, menu::IsOpen());
   std::lock_guard lock(g_mutex);
   uint64_t seq = ++g_seq;
   Frame& f = g_ring[seq % kRing];
@@ -517,6 +543,7 @@ uint64_t OnFrame(const FrameSample& s) {
 }
 
 void OnGpuFrame(uint64_t seq, double gpu_ms) {
+  DiagOnGpu(gpu_ms);
   std::lock_guard lock(g_mutex);
   Frame& f = g_ring[seq % kRing];
   if (f.seq == seq) f.gpu_ms = gpu_ms;
@@ -536,6 +563,21 @@ void SetDeviceName(const std::string& name) {
 void BuildMenu(float ui) {
   EnsureThread();
   if (!ImGui::CollapsingHeader("Performance (gargalos, sensores, driver, gravação)")) return;
+  {  // Medir desempenho (odin2_diag.cpp): relatório completo, como o do TOTK/BOTW.
+    const std::string diag = DiagStatus();
+    if (diag.empty()) {
+      if (ImGui::Button("Medir desempenho (60 s)")) DiagRequest(60);
+      ImGui::SameLine();
+      if (ImGui::Button("Medir (10 min)")) DiagRequest(600);
+      const std::string last = DiagLastReport();
+      if (!last.empty()) ImGui::TextDisabled("Último relatório: %s", last.substr(last.find_last_of('/') + 1).c_str());
+    } else {
+      ImGui::TextColored(ImVec4(0.55f, 0.9f, 0.55f, 1.0f), "%s", diag.c_str());
+    }
+    ImGui::TextDisabled("Feche o menu e jogue: começa após 5 s seguidos de jogo. Relatório em logs/perf (tela Logs\n"
+                        "de desempenho do app) e no gtav.log, linhas [diag].");
+    ImGui::Separator();
+  }
   std::lock_guard lock(g_mutex);
   const double cap_ms = CapTargetMs();
   std::vector<Frame> win = LastFrames(kWindow, true);

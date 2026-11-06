@@ -9,6 +9,7 @@
 //   - A cada 10 s: "[stall] cpu por thread" com o uso médio das que mais consomem.
 // Só lê arquivos do próprio processo e do sysfs da CPU; nada de root.
 #include "odin2_perf.h"
+#include "odin2_procstat.h"
 
 #include <rex/logging.h>
 
@@ -33,18 +34,7 @@ namespace gtav::native::perf {
 
 namespace {
 
-struct ThreadStat {
-  std::string comm;
-  char state = '?';
-  uint64_t ticks = 0;  // utime + stime
-};
-
-struct Snapshot {
-  std::chrono::steady_clock::time_point t;
-  std::map<int, ThreadStat> threads;
-  uint64_t read_bytes = 0, majflt = 0;
-  int mhz[3] = {-1, -1, -1};  // cpu0 (pequeno), cpu4 (médio), cpu7 (prime)
-};
+using Snapshot = ProcSnapshot;
 
 std::mutex g_mutex;
 std::condition_variable g_cv;
@@ -58,74 +48,7 @@ std::deque<Request> g_requests;
 bool g_started = false;
 long g_tick_hz = 100;
 
-bool ReadFile(const char* path, char* buf, size_t size) {
-  FILE* f = std::fopen(path, "re");
-  if (!f) return false;
-  size_t n = std::fread(buf, 1, size - 1, f);
-  std::fclose(f);
-  buf[n] = 0;
-  return n > 0;
-}
-
-int ReadMhz(int cpu) {
-  char path[96], buf[64];
-  std::snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_cur_freq", cpu);
-  if (!ReadFile(path, buf, sizeof(buf))) return -1;
-  return int(std::strtoll(buf, nullptr, 10) / 1000);
-}
-
-Snapshot Take() {
-  Snapshot s;
-  s.t = std::chrono::steady_clock::now();
-  if (DIR* d = opendir("/proc/self/task")) {
-    char path[64], buf[1024];
-    while (dirent* e = readdir(d)) {
-      if (e->d_name[0] < '0' || e->d_name[0] > '9') continue;
-      std::snprintf(path, sizeof(path), "/proc/self/task/%s/stat", e->d_name);
-      if (!ReadFile(path, buf, sizeof(buf))) continue;
-      char* open = std::strchr(buf, '(');
-      char* close = std::strrchr(buf, ')');
-      if (!open || !close || close[1] == 0) continue;
-      ThreadStat ts;
-      ts.comm.assign(open + 1, close);
-      // Depois de ") ": estado (3), ... utime (14), stime (15) — contando a partir de 1 no arquivo.
-      char* p = close + 2;
-      ts.state = *p;
-      int field = 3;
-      uint64_t ut = 0, st = 0;
-      while (*p && field < 15) {
-        p = std::strchr(p, ' ');
-        if (!p) break;
-        p++;
-        field++;
-        if (field == 14) ut = std::strtoull(p, nullptr, 10);
-        if (field == 15) st = std::strtoull(p, nullptr, 10);
-      }
-      ts.ticks = ut + st;
-      s.threads[std::atoi(e->d_name)] = std::move(ts);
-    }
-    closedir(d);
-  }
-  char buf[2048];
-  if (ReadFile("/proc/self/io", buf, sizeof(buf))) {
-    if (const char* r = std::strstr(buf, "\nread_bytes: ")) s.read_bytes = std::strtoull(r + 13, nullptr, 10);
-  }
-  if (ReadFile("/proc/self/stat", buf, sizeof(buf))) {
-    // majflt = campo 12.
-    if (char* close = std::strrchr(buf, ')')) {
-      char* p = close + 2;
-      for (int field = 3; field < 12 && p; field++) {
-        p = std::strchr(p, ' ');
-        if (p) p++;
-      }
-      if (p) s.majflt = std::strtoull(p, nullptr, 10);
-    }
-  }
-  s.mhz[0] = ReadMhz(0);
-  s.mhz[1] = ReadMhz(4);
-  s.mhz[2] = ReadMhz(7);
-  return s;
-}
+Snapshot Take() { return ProcTake(); }
 
 // Uso de CPU por thread entre duas amostras: "nome(tid) N ms" das maiores, e quem passou por D.
 std::string Describe(const Snapshot& a, const Snapshot& b, size_t top, bool with_d) {
@@ -249,6 +172,7 @@ void Worker() {
 }  // namespace
 
 void StartStallProbe() {
+  DiagCheckRequestFile();  // pedido de medição deixado pela tela Configurações do app
   std::lock_guard lock(g_mutex);
   if (g_started) return;
   g_started = true;

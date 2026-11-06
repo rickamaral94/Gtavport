@@ -43,3 +43,25 @@ ordem A/B/BA.
 ## Estado
 Compilado (`libgtav_fast.so` com os patches 0001–0008, NDK r29; Java/dex/manifesto). **Não executado no
 aparelho:** quais sensores o SELinux libera no Odin 2 e o custo da coleta ainda precisam ser vistos lá.
+
+## Medir desempenho (D1, `odin2_diag.cpp`)
+
+Ideia e formato do diagnóstico do TOTK/BOTW (`rickamaral94/Totknspcxi`, `runtime/diag.c`, `docs/DESEMPENHO-DIAG.md`;
+MIT, LAS Recomp/Peiikai), medido de fora das threads do jogo (sem ganchos no kernel emulado do ReXGlue).
+
+- **Pedir:** menu do jogo (Start/Voltar) > Performance > *Medir desempenho (60 s)* / *(10 min)*; ou, no app,
+  Configurações > Desempenho > *Medir desempenho no próximo jogo* (grava `diag_request.txt`, lido e apagado no início).
+- **Quando:** depois de 5 s seguidos de jogo (quadro com 250+ draws, menu fechado); conta só tempo de jogo; um aviso
+  no canto mostra a espera e o progresso.
+- **Relatório:** linhas `[diag]` no `gtav.log` e `logs/perf/perf-diag-<data>.txt` (listado em Logs de desempenho):
+  `run:` (GPU, driver, configurações), `summary:` (fps, p50/p95/p99/máx, quadros >50/>100/>400 ms, GPU por quadro,
+  MHz médio de cada cluster e da GPU, temperatura, térmico, headroom), o renderer por quadro e o gargalo, o custo do
+  amostrador (blocos de 5 s ligado/desligado), as 14 threads que mais usam CPU (CPU própria; % em R/S/D; fila sem
+  núcleo; em que cluster rodaram) e as funções onde o tempo vai: amostras de PC (SIGPROF a cada ~4 ms nas 4 threads
+  que mais usam CPU, só quando estão em R) resolvidas para `sub_<endereço do Xbox 360>` pela `.symtab` da
+  `libgtav_game.so`, mais os chamadores (registrador de retorno).
+- **Sinais:** SIGPROF não é usado pelo runtime (ele usa SIGRTMIN+N e SIGSEGV/SIGILL/SIGBUS). O handler só lê o
+  contexto e preserva o errno; `SA_RESTART`. Uma thread que entra num sleep logo depois da leitura de /proc pode
+  acordar mais cedo uma vez; por isso o amostrador só existe durante a medição, pedida pelo usuário.
+- **Testes no host:** `odin2/perf/test/run.sh` (ASan/UBSan): percentis, fila sem núcleo, clusters do 8 Gen 2,
+  ordenação, /proc e símbolos ELF de funções `sub_*`.

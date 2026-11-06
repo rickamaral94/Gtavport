@@ -21,6 +21,7 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
     private final List<String> other = new ArrayList<>();  // comentários e chaves que não são desta tela
     private final Map<Item, String> keys = new LinkedHashMap<>();
     private boolean dirty;
+    private Item diagItem;
 
     // Padrões do jogo no Android (os REXCVAR_DEFINE de cada opção).
     private static final String[][] DEFAULTS = {
@@ -137,6 +138,23 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
         opt(d, "gtav_native_fps", "Contador de FPS", "Mostra os quadros por segundo no canto da tela.", ON_OFF, ON_OFF_NAMES);
         opt(d, "gtav_touch_controls", "Controles na tela",
                 "Mostra o controle virtual na tela de toque. Com um controle conectado ele pode ficar desligado.", ON_OFF, ON_OFF_NAMES);
+        Tab p = new Tab("Desempenho");
+        tabs.add(p);
+        File req = new File(getExternalFilesDir(null), "diag_request.txt");
+        int pending = 0;
+        try {
+            pending = Integer.parseInt(new String(Files.readAllBytes(req.toPath()), StandardCharsets.UTF_8).trim());
+        } catch (Exception ignored) {
+        }
+        diagItem = p.add(new Item("Medir desempenho no próximo jogo",
+                "Mede o jogo e gera um relatório (o do TOTK/BOTW): fps, travadas, GPU, clocks, temperatura, CPU de cada "
+                        + "thread e em que funções do jogo o tempo vai. Começa após 5 s seguidos de jogo; durante a medição "
+                        + "um aviso fica no canto. O relatório aparece em Logs de desempenho. Também dá para pedir pelo menu "
+                        + "do jogo (Start > Performance).",
+                new String[] {"0", "60", "600"}, new String[] {"Desligado", "60 s", "10 min"}, pending >= 600 ? 2 : pending > 0 ? 1 : 0));
+        p.add(new Item("Logs de desempenho", "Os relatórios de Medir desempenho e as gravações da seção Performance.",
+                () -> startActivity(new android.content.Intent(this, Odin2PerfLogsActivity.class))));
+
         d.add(new Item("Restaurar padrões", "Volta todas as opções desta tela aos valores padrão do Gtavport.", () ->
                 new AlertDialog.Builder(this).setMessage("Restaurar as configurações padrão?")
                         .setPositiveButton("Restaurar", (x, y) -> {
@@ -150,6 +168,16 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
 
     @Override
     protected void onChanged(Item item) {
+        if (item == diagItem) {  // pedido de medição: arquivo lido (e apagado) pelo jogo ao iniciar
+            File req = new File(getExternalFilesDir(null), "diag_request.txt");
+            try {
+                if ("0".equals(item.value())) req.delete();
+                else Files.write(req.toPath(), item.value().getBytes(StandardCharsets.UTF_8));
+            } catch (Exception e) {
+                android.widget.Toast.makeText(this, "Não foi possível salvar: " + e.getMessage(), android.widget.Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
         String key = keys.get(item);
         if (key == null) return;
         ini.put(key, item.value());

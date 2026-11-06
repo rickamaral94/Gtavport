@@ -16,6 +16,7 @@ jobs:
         run: |
           python3 -m unittest discover -s tools/bench/tests -v
           python3 -m unittest discover -s tools/tests -v
+          odin2/perf/test/run.sh  # Medir desempenho: contas, /proc, símbolos ELF (ASan/UBSan)
       - name: Sintaxe dos scripts
         run: for f in $(git ls-files '*.sh'); do bash -n "$f"; done
 
