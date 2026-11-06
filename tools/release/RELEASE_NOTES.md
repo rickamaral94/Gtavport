@@ -2,7 +2,8 @@
 > **Pré-release em teste no aparelho.** Novidades: ícone e nome **Gtavport**; menu inicial e tela de
 > **Configurações** (vídeo e exibição) no estilo do menu do GTA V; filtro anisotrópico; **atualizar o app não pede
 > mais outra compilação do jogo** (instale por cima da v0.2.2/v0.2.3); e a **sonda de travadas**: o `gtav.log`
-> passa a dizer o que o jogo fazia em cada travada (linhas `[stall]`), para atacar o stutter com dados.
+> passa a dizer o que o jogo fazia em cada travada (linhas `[stall]`), para atacar o stutter com dados. **Sair do
+> jogo sem forçar o encerramento:** Voltar (ou Start) abre o menu do jogo > Sair do jogo > Voltar ao menu inicial / Fechar o app.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.
