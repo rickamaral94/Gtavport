@@ -1,0 +1,115 @@
+--- a/gtav/src/native/backend.cpp
++++ b/gtav/src/native/backend.cpp
+@@ -158,6 +158,16 @@
+ REXCVAR_DEFINE_INT32(gtav_native_low_memory_mb, GTAV_LOW_MEMORY_DEFAULT, "GTAV",
+                      "iOS: below this much memory left before the OS kills the app, the texture and buffer caches "
+                      "shrink to half their budgets and release what was idle for 0.5 s (0: off)");
++// Gtavport: every translated pixel shader that writes colour keeps a discard (the alpha-to-mask clip
++// behind a uniform), so the GPU runs it before the depth/stencil test ("late Z"). GTA's deferred lights
++// mark their volume in the stencil and then shade only the marked pixels; with late tests each light
++// shaded its whole volume. In a room with a lit Christmas tree (dozens of small lights) the HDR
++// lighting pass went from ~3 ms to ~80 ms per frame on the Odin 2. Pipelines that write neither depth
++// nor stencil get the shader with EarlyFragmentTests: the same image (nothing they could discard
++// changes the depth or stencil buffer), tested before shading.
++REXCVAR_DEFINE_BOOL(gtav_native_early_tests, true, "GTAV",
++                    "Native renderer: depth/stencil test before the pixel shader in pipelines that write neither "
++                    "depth nor stencil (the translated shaders' discard otherwise forces the test after it)");
+ REXCVAR_DEFINE_BOOL(gtav_native_lightvol_keep, true, "GTAV",
+                     "Light-volume stencil marks keep the stencil where the volume is behind the scene "
+                     "(no holes in the clouds over the sky)");
+@@ -2773,6 +2783,57 @@
+     return (shaders[key] = std::move(shader)).get();
+   }
+ 
++  // Gtavport (--gtav_native_early_tests): the game pixel shader with OpExecutionMode EarlyFragmentTests
++  // added after its entry point (not for the tile override variant, nor shaders that write depth).
++  std::unordered_map<uint64_t, std::unique_ptr<RenderShader>> early_shaders;
++  RenderShader* EarlyShader(uint64_t hash) {
++    if (TileOverride(hash)) return nullptr;
++    if (auto it = early_shaders.find(hash); it != early_shaders.end()) return it->second.get();
++    std::string dir = REXCVAR_GET(gtav_native_spirv_dir);
++    if (dir.empty()) dir = DefaultSpirvDir();
++    std::vector<uint32_t> words;
++    if (FILE* f = std::fopen(fmt::format("{}/ps_{:016X}.spv", dir, hash).c_str(), "rb")) {
++      std::fseek(f, 0, SEEK_END);
++      long size = std::ftell(f);
++      std::fseek(f, 0, SEEK_SET);
++      if (size > 20 && size % 4 == 0) {
++        words.resize(size_t(size) / 4);
++        if (std::fread(words.data(), 4, words.size(), f) != words.size()) words.clear();
++      }
++      std::fclose(f);
++    }
++    std::unique_ptr<RenderShader> shader;
++    std::vector<uint32_t> out;
++    if (AddEarlyFragmentTests(words, &out))
++      shader = device->createShader(out.data(), out.size() * 4, "main", RenderShaderFormat::SPIRV);
++    return (early_shaders[hash] = std::move(shader)).get();
++  }
++  // SPIR-V: OpExecutionMode %entry EarlyFragmentTests after the last OpEntryPoint. False when the module
++  // is not a fragment shader, already has it, or writes depth (BuiltIn FragDepth / DepthReplacing).
++  static bool AddEarlyFragmentTests(const std::vector<uint32_t>& in, std::vector<uint32_t>* out) {
++    constexpr uint32_t kOpEntryPoint = 15, kOpExecutionMode = 16, kOpDecorate = 71;
++    constexpr uint32_t kFragment = 4, kEarly = 9, kDepthReplacing = 12, kBuiltIn = 11, kFragDepth = 22;
++    if (in.size() < 5 || in[0] != 0x07230203u) return false;
++    size_t insert_at = 0;
++    uint32_t entry = 0;
++    for (size_t i = 5; i < in.size();) {
++      const uint32_t count = in[i] >> 16, op = in[i] & 0xFFFF;
++      if (count == 0 || i + count > in.size()) return false;
++      if (op == kOpEntryPoint && count >= 3 && in[i + 1] == kFragment) {
++        entry = in[i + 2];
++        insert_at = i + count;
++      }
++      if (op == kOpExecutionMode && count >= 3 && (in[i + 2] == kEarly || in[i + 2] == kDepthReplacing)) return false;
++      if (op == kOpDecorate && count >= 4 && in[i + 2] == kBuiltIn && in[i + 3] == kFragDepth) return false;
++      i += count;
++    }
++    if (!entry) return false;
++    out->assign(in.begin(), in.begin() + long(insert_at));
++    out->insert(out->end(), {(3u << 16) | kOpExecutionMode, entry, kEarly});
++    out->insert(out->end(), in.begin() + long(insert_at), in.end());
++    return true;
++  }
++
+   // Color formats that share one EDRAM layout alias the same target: the guest draws into a
+   // surface under one format and keeps drawing (or resolves) under the other, e.g. the final scene
+   // as 2_10_10_10_FLOAT and the HUD over it as 2_10_10_10_FLOAT_AS_16_16_16_16.
+@@ -3437,7 +3498,8 @@
+     k.stencil[1] = regs::Read(r, regs::RB_STENCILREFMASK_BF);
+     k.mode = regs::Read(r, regs::PA_SU_SC_MODE_CNTL);
+     k.alpha_to_mask = (regs::Read(r, regs::RB_COLORCONTROL) >> 4) & 1;
+-    uint32_t exp = (REXCVAR_GET(gtav_native_depth_clamp) ? 1u : 0u) | (REXCVAR_GET(gtav_native_lightvol_keep) ? 2u : 0u);
++    uint32_t exp = (REXCVAR_GET(gtav_native_depth_clamp) ? 1u : 0u) | (REXCVAR_GET(gtav_native_lightvol_keep) ? 2u : 0u) |
++                   (REXCVAR_GET(gtav_native_early_tests) ? 4u : 0u);
+     return Hash(&k, sizeof(k), Hash(&exp, 4, layout_hash));
+   }
+   static uint64_t LayoutHash(const vertex_layout::HostLayout& vl) {
+@@ -3533,6 +3595,17 @@
+           (desc.stencilReference & ~0x60u) == 0 && (desc.stencilReadMask & ~0x60u) == 0 && desc.stencilReference)
+         desc.stencilWriteMask = 0x60;
+     }
++    // --gtav_native_early_tests: no depth or stencil writes -> the EarlyFragmentTests copy of the shader.
++    if (ps && ps_hash && REXCVAR_GET(gtav_native_early_tests) && !desc.depthWriteEnabled) {
++      auto keeps = [](const RenderStencilFaceDesc& f) {
++        return f.passOp == RenderStencilOp::KEEP && f.failOp == RenderStencilOp::KEEP &&
++               f.depthFailOp == RenderStencilOp::KEEP;
++      };
++      const bool stencil_writes = desc.stencilEnabled && desc.stencilWriteMask != 0 &&
++                                  !(keeps(desc.stencilFrontFace) && keeps(desc.stencilBackFace));
++      if (!stencil_writes)
++        if (RenderShader* early = EarlyShader(ps_hash)) desc.pixelShader = early;
++    }
+     uint32_t mode = regs::Read(r, regs::PA_SU_SC_MODE_CNTL);
+     bool cull_front = mode & 1, cull_back = mode & 2;
+     static const bool no_cull_shadow = std::getenv("GTAV_NATIVE_NO_CULL_16_16") != nullptr;
+@@ -3606,7 +3679,8 @@
+     // Warm-up records: only pipelines whose shaders are the SPIR-V files of their hashes. Not while
+     // the pixel shader is still being translated: the draw then goes out depth-only under the same
+     // key, and a record of that (ps 0) made every later run draw those surfaces unlit (grey world).
+-    if (vs && ps != diag_flat_ps.get() && !TileOverride(ps_hash) && (ps || !ps_hash)) {
++    // (Gtavport: nor with the EarlyFragmentTests copy: the record only names the shader's hash.)
++    if (vs && ps != diag_flat_ps.get() && !TileOverride(ps_hash) && (ps || !ps_hash) && desc.pixelShader == ps) {
+       PipelineBytesWriter w;
+       uint8_t has_gs = desc.geometryShader != nullptr;
+       PipelineFields(w, desc, elements, slots, sc, has_gs);

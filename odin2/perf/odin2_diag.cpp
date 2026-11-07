@@ -92,6 +92,7 @@ struct Variant {
 };
 constexpr Variant kVariants[] = {
     {"como está", nullptr, nullptr},
+    {"teste depois do shader, como antes (early_tests=false)", "gtav_native_early_tests", "false"},
     {"sombras do sol por tile do jogo (tile_penumbra_all=false)", "gtav_native_tile_penumbra_all", "false"},
     {"sombreamento 2x2 (coarse_shading=2)", "gtav_native_coarse_shading", "2"},
     {"barreiras completas (fragment_barriers=false)", "gtav_native_fragment_barriers", "false"},

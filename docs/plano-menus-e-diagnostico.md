@@ -112,3 +112,13 @@ R16G16B16A16_FLOAT com profundidade, ~6 passes): 2,9 -> 72,6 ms e 2,9 -> 75,2 ms
 Próximo passo: "Comparar opções (A/B, 10 min)" no menu: a cada 10 s troca tile_penumbra_all=false (sombras do sol
 por tile, no Android forçado ligado), coarse_shading=2 (se cair ~4x, o passe é preso no custo por pixel) e
 fragment_barriers=false, e o relatório compara fps, p95, GPU e quadros > 100 ms de cada lado.
+
+### D2, quinta rodada (relatório de 07/11 19:55, 10 min, Turnip; fotos da cena)
+13,5 fps; 2148 quadros > 100 ms; o mesmo passe HDR 2,7 -> 79,8 ms. As fotos: um interior (escritório da Bobcat) com
+uma árvore de Natal cujas luzinhas piscam: 15 fps com elas apagadas, 4 fps acesas. Cada luzinha é uma luz do
+deferred, desenhada como volume nesse passe. Causa: todo shader de pixel traduzido (XenosRecomp) que escreve cor
+mantém um `clip()` (o alpha-to-mask atrás de um uniform), então a GPU testa profundidade/stencil **depois** do shader:
+cada luz sombreava o volume inteiro em vez de só os pixels marcados no stencil. Patch 0028: pipelines que não gravam
+profundidade nem stencil usam uma cópia do shader com `EarlyFragmentTests` (mesma imagem: nada que o shader descarte
+muda os buffers); SPIR-V validado com spirv-val; fora do cache de pipelines salvo (como a variante _tiles2).
+`--gtav_native_early_tests` (ligado) e uma variante no "Comparar opções" para medir no aparelho.

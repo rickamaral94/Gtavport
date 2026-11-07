@@ -1,8 +1,8 @@
 > [!WARNING]
-> **Pré-release em teste no aparelho.** As travadas de agora vêm de **um único passe da GPU** (o alvo HDR principal
-> da cena), que em algumas fases vai de ~3 ms a ~75 ms por quadro. Esta versão traz **Logs de desempenho > Comparar
-> opções (A/B, 10 min)**: a cada 10 s troca uma opção gráfica suspeita e o relatório compara os lados (a imagem pode
-> mudar um pouco durante a gravação).
+> **Pré-release em teste no aparelho.** Correção para as travadas em cenas com muitas luzes (ex.: a árvore de Natal
+> piscando no escritório da Bobcat: 4 fps): cada luz sombreava o volume inteiro dela porque o teste de
+> profundidade/stencil acontecia depois do shader. Agora, onde é seguro, o teste vem antes. Para medir: **Logs de
+> desempenho > Comparar opções (A/B, 10 min)** compara também com o jeito antigo.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.
