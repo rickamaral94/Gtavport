@@ -103,3 +103,12 @@ jogo: 89% -> 42% do quadro. GPU agora pesa: 22,8 ms/quadro (p95 97 ms), esperand
   passe que explode em certas cenas, algo do Turnip (envio/BOs). O relatório ganha a linha do tempo a cada 2 s (fps,
   GPU, submit, MHz e temperatura) e o GPU por tipo de passe da janela mais rápida x mais lenta; o menu ganha a
   gravação de 10 min. Próximo passo: comparar com o driver da Qualcomm na mesma cena.
+
+### D2, quarta rodada (v0.2.9, dois relatórios Turnip de 07/11, 08:09 e 16:04)
+p50 16,8 ms (60 fps), mas ~150 quadros/min de ~250 ms: 28,9 e 25,8 fps. A linha do tempo mostra fases de 2-6 s com
+3-5 fps e GPU 200-300 ms por quadro, intercaladas com 60 fps; GPU a 680 MHz e 54-62 °C (não é clock nem térmico);
+envio 0,2 ms. **Um único tipo de passe explode nos dois:** `targets 1280x721 1c fmt 10 +depth` (alvo HDR
+R16G16B16A16_FLOAT com profundidade, ~6 passes): 2,9 -> 72,6 ms e 2,9 -> 75,2 ms por quadro; o resto igual.
+Próximo passo: "Comparar opções (A/B, 10 min)" no menu: a cada 10 s troca tile_penumbra_all=false (sombras do sol
+por tile, no Android forçado ligado), coarse_shading=2 (se cair ~4x, o passe é preso no custo por pixel) e
+fragment_barriers=false, e o relatório compara fps, p95, GPU e quadros > 100 ms de cada lado.

@@ -70,7 +70,8 @@ public class Odin2MenuActivity extends Odin2GtaActivity {
         try {
             if ("off".equals(item.value())) requestFile().delete();
             else java.nio.file.Files.write(requestFile().toPath(),
-                    ("always".equals(item.value()) ? "60 always" : "next600".equals(item.value()) ? "600" : "60")
+                    ("always".equals(item.value()) ? "60 always" : "ab".equals(item.value()) ? "600 ab"
+                            : "next600".equals(item.value()) ? "600" : "60")
                             .getBytes(java.nio.charset.StandardCharsets.UTF_8));
         } catch (Exception e) {
             android.widget.Toast.makeText(this, "Não foi possível salvar: " + e.getMessage(), android.widget.Toast.LENGTH_LONG).show();
@@ -98,13 +99,17 @@ public class Odin2MenuActivity extends Odin2GtaActivity {
         // Grava os primeiros 60 s de JOGO (sem menus, loading nem vídeos) e salva em logs/perf-diag-<data>.txt, a
         // mesma pasta do gtav.log (odin2_diag.cpp). O pedido é o arquivo diag_request.txt, lido no início do jogo.
         String cur = readRequest();
-        int idx = cur.endsWith("always") ? 3 : cur.startsWith("600") ? 2 : cur.isEmpty() || cur.startsWith("0") ? 0 : 1;
+        int idx = cur.endsWith("always") ? 3 : cur.endsWith("ab") ? 4 : cur.startsWith("600") ? 2
+                : cur.isEmpty() || cur.startsWith("0") ? 0 : 1;
         logsItem = m.add(new Item("Logs de desempenho",
                 "Grava os primeiros 60 s (ou 10 min) de jogo (só jogo: sem menus, loading nem vídeos; começa após 5 s jogando) e salva "
                         + "o relatório na pasta logs, junto do gtav.log: perf-diag-<data>.txt. Traz fps, travadas, GPU, clocks, "
-                        + "temperatura, CPU de cada thread e as funções do jogo onde o tempo vai. Um aviso no canto mostra a gravação.",
-                new String[] {"off", "next", "next600", "always"},
-                new String[] {"Desligado", "Próximo jogo (60 s)", "Próximo jogo (10 min)", "Em todo início (60 s)"}, idx));
+                        + "temperatura, CPU de cada thread e as funções do jogo onde o tempo vai. Um aviso no canto mostra a gravação. "
+                        + "Comparar opções: a cada 10 s troca uma opção gráfica suspeita (sombras do sol, sombreamento 2x2, "
+                        + "barreiras) e compara: a imagem pode mudar um pouco durante a gravação.",
+                new String[] {"off", "next", "next600", "always", "ab"},
+                new String[] {"Desligado", "Próximo jogo (60 s)", "Próximo jogo (10 min)", "Em todo início (60 s)",
+                        "Comparar opções (A/B, 10 min)"}, idx));
         m.add(new Item("Ver logs gravados", "Os relatórios e as gravações, com exportação para Downloads.",
                 () -> startActivity(new Intent(this, Odin2PerfLogsActivity.class))));
         m.add(new Item("Reinstalar / recompilar", "Volta à tela de instalação: trocar os discos ou o Title Update, ou compilar o jogo de novo.",

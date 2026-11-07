@@ -79,9 +79,28 @@ struct FrameRec {
   double interval, record, idle, gpu_wait, submit;
   uint32_t draws;
   bool sampler_on;
+  int variant;  // A/B: índice em kVariants (0 = como está)
 };
 std::vector<FrameRec> g_frames;
 std::vector<double> g_gpu;  // tempo de GPU por quadro (chega depois)
+// A/B ("Comparar" no app): a cada 10 s de medição troca uma opção suspeita e o relatório compara os lados.
+// Feito para as fases em que o passe principal (alvo HDR 1280x721 com profundidade) ia de ~3 ms a ~75 ms.
+struct Variant {
+  const char* name;
+  const char* cvar;   // nullptr: como está
+  const char* value;
+};
+constexpr Variant kVariants[] = {
+    {"como está", nullptr, nullptr},
+    {"sombras do sol por tile do jogo (tile_penumbra_all=false)", "gtav_native_tile_penumbra_all", "false"},
+    {"sombreamento 2x2 (coarse_shading=2)", "gtav_native_coarse_shading", "2"},
+    {"barreiras completas (fragment_barriers=false)", "gtav_native_fragment_barriers", "false"},
+};
+constexpr int kVariantCount = int(sizeof(kVariants) / sizeof(kVariants[0]));
+std::atomic<int> g_variant{0};
+std::string g_ab_saved[8];
+bool g_ab = false;
+std::vector<std::pair<int, double>> g_gpu_variant;  // (variante, GPU ms)
 // Linha do tempo (a cada 2 s) e os passes de GPU da janela de 300 quadros mais rápida e da mais lenta:
 // as travadas de GPU vêm em fases (11 ms -> 60 ms por quadro com os mesmos passes), e a média escondia.
 std::vector<std::string> g_timeline;
@@ -323,6 +342,32 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
     }
   }
 
+  if (g_ab) {
+    std::vector<std::pair<int, double>> gv;
+    {
+      std::lock_guard lock(g_mutex);
+      gv.swap(g_gpu_variant);
+    }
+    line("comparar (A/B, 10 s cada, em rodízio): fps | p95 do quadro | GPU média e p95 | quadros > 100 ms");
+    for (int v = 0; v < kVariantCount; v++) {
+      std::vector<double> ivv, gg;
+      size_t slow = 0;
+      double tot = 0;
+      for (const FrameRec& f : frames)
+        if (f.variant == v) {
+          ivv.push_back(f.interval);
+          tot += f.interval;
+          slow += f.interval > 100;
+        }
+      for (const auto& [vv, ms] : gv)
+        if (vv == v) gg.push_back(ms);
+      std::snprintf(b, sizeof b, "  %5.1f fps | p95 %6.1f ms | GPU %5.1f / %6.1f ms | %4zu  %s",
+                    tot > 0 ? 1000.0 * double(ivv.size()) / tot : 0, Percentile(ivv, 95), Mean(gg), Percentile(gg, 95), slow,
+                    kVariants[v].name);
+      line(b);
+    }
+  }
+
   // Threads
   if (have_snaps) {
     const long hz = sysconf(_SC_CLK_TCK) > 0 ? sysconf(_SC_CLK_TCK) : 100;
@@ -480,6 +525,17 @@ void Run() {
       if (now - block_start >= std::chrono::seconds(5)) {
         g_sampler_on = !g_sampler_on.load();
         block_start = now;
+        // A/B: a cada 10 s (dois blocos) a próxima variante; volta a opção da anterior antes.
+        static int blocks = 0;
+        if (g_ab && (++blocks % 2) == 0) {
+          const int cur = g_variant.load(), next = (cur + 1) % kVariantCount;
+          if (kVariants[cur].cvar) rex::cvar::SetFlagByName(kVariants[cur].cvar, g_ab_saved[cur]);
+          if (kVariants[next].cvar) {
+            g_ab_saved[next] = rex::cvar::GetFlagByName(kVariants[next].cvar);
+            rex::cvar::SetFlagByName(kVariants[next].cvar, kVariants[next].value);
+          }
+          g_variant = next;
+        }
       }
       if (now - last_dev >= std::chrono::seconds(2)) {
         last_dev = now;
@@ -547,6 +603,11 @@ void Run() {
       std::this_thread::sleep_for(std::chrono::milliseconds(20));  // sinais em voo
       const double window = nsnaps >= 2 ? std::chrono::duration<double, std::milli>(last.t - first.t).count() : 1;
       rex::cvar::SetFlagByName("gtav_native_pass_gpu_times", g_pass_flag_before.empty() ? "false" : g_pass_flag_before);
+      if (g_ab) {
+        const int cur = g_variant.load();
+        if (kVariants[cur].cvar) rex::cvar::SetFlagByName(kVariants[cur].cvar, g_ab_saved[cur]);
+        g_variant = 0;
+      }
       Report(std::move(acc), first, last, nsnaps >= 2, dev, window);
       g_state = State::kIdle;
       return;
@@ -571,6 +632,9 @@ void Arm(int seconds, const char* why, bool from_file, bool always = false) {
     g_pass_best.clear();
     g_pass_worst.clear();
     g_pass_best_total = g_pass_worst_total = 0;
+    g_ab = false;
+    g_variant = 0;
+    g_gpu_variant.clear();
     g_nongame_frames = 0;
     g_armed_at = Clock::now();
   }
@@ -591,9 +655,14 @@ void DiagCheckRequestFile() {
   int seconds = 0;
   std::string mode;
   std::ifstream(f) >> seconds >> mode;
-  if (seconds > 0)
-    Arm(std::min(seconds, 3600), mode == "always" ? "logs de desempenho em todo início (app)" : "pedido no app", true,
-        mode == "always");
+  if (seconds > 0) {
+    Arm(std::min(seconds, 3600), mode == "always" ? "logs de desempenho em todo início (app)"
+                                 : mode == "ab"   ? "comparar opções (A/B) no app"
+                                                  : "pedido no app",
+        true, mode == "always");
+    std::lock_guard lock(g_mutex);
+    g_ab = mode == "ab";
+  }
   else std::filesystem::remove(f, ec);
 }
 
@@ -617,7 +686,8 @@ void DiagOnFrame(const FrameSample& s, bool menu_open) {
     g_nongame_frames++;
     return;
   }
-  g_frames.push_back({s.interval_ms, s.record_ms, s.idle_ms, s.gpu_wait_ms, s.submit_ms, s.draws, g_sampler_on.load()});
+  g_frames.push_back({s.interval_ms, s.record_ms, s.idle_ms, s.gpu_wait_ms, s.submit_ms, s.draws, g_sampler_on.load(),
+                      g_variant.load()});
   g_game_ms += s.interval_ms;
   if (g_game_ms >= g_seconds * 1000.0 || Clock::now() - g_rec_start > std::chrono::seconds(g_seconds * 3 + 30))
     g_state = State::kReporting;
@@ -627,6 +697,7 @@ void DiagOnGpu(double gpu_ms) {
   if (g_state.load(std::memory_order_relaxed) != State::kRecording || gpu_ms <= 0) return;
   std::lock_guard lock(g_mutex);
   g_gpu.push_back(gpu_ms);
+  if (g_ab) g_gpu_variant.push_back({g_variant.load(), gpu_ms});
 }
 
 void DiagOnPasses(const std::vector<std::pair<std::string, double>>& passes, double total_ms) {

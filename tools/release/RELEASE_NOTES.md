@@ -1,8 +1,8 @@
 > [!WARNING]
-> **Pré-release em teste no aparelho.** Com as correções do D2 o jogo chegou a **60 fps** no Odin 2 (Turnip), mas
-> em algumas fases a GPU fica 3-5x mais lenta. Esta versão traz o diagnóstico para elas: o relatório de **Logs de
-> desempenho** agora tem a linha do tempo (fps, GPU, envio, clocks e temperatura a cada 2 s) e o tempo de GPU por
-> tipo de passe na fase rápida x lenta, e o menu ganha a gravação de **10 min**.
+> **Pré-release em teste no aparelho.** As travadas de agora vêm de **um único passe da GPU** (o alvo HDR principal
+> da cena), que em algumas fases vai de ~3 ms a ~75 ms por quadro. Esta versão traz **Logs de desempenho > Comparar
+> opções (A/B, 10 min)**: a cada 10 s troca uma opção gráfica suspeita e o relatório compara os lados (a imagem pode
+> mudar um pouco durante a gravação).
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.
