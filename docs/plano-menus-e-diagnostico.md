@@ -67,3 +67,18 @@ mostrar o relatório).
 
 ## Fora deste plano
 DLCs (combinado: depois do jogo rodar bem), geração de quadros (lsfg do TOTK: avaliar depois do D2).
+
+### D2, primeira rodada (relatório perf-diag de 06/11 21:48, Turnip, 60 s de jogo)
+11,8 fps; renderer esperando o jogo 89% do quadro; GPU 15,7 ms. Achados:
+1. **O jogo inteiro num núcleo só.** As threads do jogo (a principal e as 5 de trabalho) rodaram 100% no núcleo prime e
+   52-88% do tempo prontas sem núcleo: a principal é fixada no prime (android_threads.cpp) ~1,5 s depois do início e
+   as threads que ela cria herdam a máscara. Patch 0026: as que herdaram "só o prime" ganham os outros núcleos.
+2. **A espera de 1 ms virava giro.** `GPU Commands` usou 93% de um núcleo, 96% em `clock_gettime`: a espera alertável
+   do runtime arredondava o tempo restante para baixo (1 ms -> 0) e girava lendo o relógio. Patch 0025 (ceil). Vale
+   para toda espera alertável curta do jogo.
+3. **Travas que giram.** As threads de trabalho passam 77% em syscall e 18% em `atomic_cas` dentro de
+   `RtlEnterCriticalSection` (giro de spin count * 256 e depois espera): com o item 1 corrigido o dono da trava deixa
+   de disputar o mesmo núcleo. Reavaliar na próxima rodada.
+4. **SDLThread a 99%** (63% em `clock_gettime`, átomos/mutex do SDL): sem pilha ainda. O amostrador agora tira a
+   assinatura PAC dos endereços e segue a cadeia de frames (leitura segura via process_vm_readv): o próximo
+   relatório traz as pilhas.

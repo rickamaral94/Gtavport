@@ -1,0 +1,55 @@
+--- a/gtav/src/android_threads.cpp
++++ b/gtav/src/android_threads.cpp
+@@ -25,9 +25,36 @@
+ // CPU). Checked every 250 ms, so it is live (--gtav_native_ab=gtav_android_main_prime=true|false).
+ REXCVAR_DEFINE_BOOL(gtav_android_main_prime, true, "GTAV",
+                     "Android: run the game's main thread on the prime core (the last CPU)");
++// Gtavport: a thread inherits its creator's affinity. Pinned ~1.5 s into the run, the main thread then
++// created the game's worker threads, and all of them inherited "prime core only": on the Odin 2 the
++// whole game shared one core (52-88% of the time ready but not running) and its spinning critical
++// sections spun on the core of the thread holding them. Threads that still have exactly the prime-only
++// mask (other than the main thread) get every core but the prime one back.
++REXCVAR_DEFINE_BOOL(gtav_android_unpin_children, true, "GTAV",
++                    "Android: give threads that inherited the main thread's prime-only affinity the other cores");
+ 
+ namespace {
+ 
++// Threads (other than skip) whose affinity is exactly {cpu}: moved to cpus 0..cpu-1. Returns how many.
++int UnpinInherited(int skip, int cpu) {
++  DIR* dir = opendir("/proc/self/task");
++  if (!dir) return 0;
++  int moved = 0;
++  while (dirent* e = readdir(dir)) {
++    if (e->d_name[0] < '0' || e->d_name[0] > '9') continue;
++    const int tid = std::atoi(e->d_name);
++    if (tid == skip) continue;
++    cpu_set_t set;
++    CPU_ZERO(&set);
++    if (sched_getaffinity(tid, sizeof(set), &set) != 0) continue;
++    if (CPU_COUNT(&set) != 1 || !CPU_ISSET(cpu, &set)) continue;
++    CPU_ZERO(&set);
++    for (int i = 0; i < cpu; i++) CPU_SET(i, &set);
++    if (sched_setaffinity(tid, sizeof(set), &set) == 0) moved++;
++  }
++  closedir(dir);
++  return moved;
++}
+ bool SetAffinity(int tid, int first, int last) {
+   cpu_set_t set;
+   CPU_ZERO(&set);
+@@ -68,6 +95,15 @@
+       if (!tid) tid = FindMainThread();
+       if (!tid) continue;
+       const int want = REXCVAR_GET(gtav_android_main_prime) ? 1 : 0;
++      if (want && pinned == 1 && REXCVAR_GET(gtav_android_unpin_children)) {
++        static int total = 0;
++        if (int moved = UnpinInherited(tid, n - 1); moved > 0) {
++          total += moved;
++          if (total <= 64)
++            REXLOG_INFO("[android] {} thread(s) that inherited the prime-only affinity now use cores 0-{} ({} so far)",
++                        moved, n - 2, total);
++        }
++      }
+       if (want == pinned) continue;
+       if (!(want ? SetAffinity(tid, n - 1, n - 1) : SetAffinity(tid, 0, n - 1))) {
+         tid = 0;  // gone (or a new run of it): look it up again

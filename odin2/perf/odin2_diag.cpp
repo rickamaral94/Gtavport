@@ -46,6 +46,7 @@
 #include <dlfcn.h>
 #include <sys/resource.h>
 #include <sys/syscall.h>
+#include <sys/uio.h>
 #include <ucontext.h>
 #include <unistd.h>
 
@@ -84,10 +85,22 @@ std::vector<double> g_gpu;  // tempo de GPU por quadro (chega depois)
 uint64_t g_nongame_frames = 0;
 
 // Amostras de PC (SIGPROF): anel sem lock, escrito pelo handler.
+constexpr int kFrames = 5;  // retornos seguidos pela cadeia de frame pointers (fp, lr)
 struct PcSample {
   int32_t tid;
   uint64_t pc, lr;
+  uint64_t frames[kFrames];
 };
+
+// Lê 16 bytes do próprio processo sem risco: process_vm_readv devolve erro (EFAULT) num endereço ruim em vez
+// de um SIGSEGV dentro do handler de sinal (uma cadeia de frames quebrada não derruba o jogo).
+inline bool SafeRead(uint64_t addr, uint64_t out[2]) {
+  struct iovec local = {out, 16}, remote = {reinterpret_cast<void*>(addr), 16};
+  return syscall(SYS_process_vm_readv, getpid(), &local, 1UL, &remote, 1UL, 0UL) == 16;
+}
+
+// arm64 do Android assina endereços de retorno (PAC): os bits altos não são endereço.
+inline uint64_t StripPac(uint64_t a) { return a & 0x0000FFFFFFFFFFFFull; }
 constexpr uint32_t kPcRing = 1u << 17;
 PcSample g_pc[kPcRing];
 std::atomic<uint32_t> g_pc_n{0};
@@ -103,11 +116,34 @@ void ProfHandler(int, siginfo_t*, void* uc_void) {
   if (i < kPcRing) {
     auto* uc = static_cast<ucontext_t*>(uc_void);
 #if defined(__aarch64__)
-    g_pc[i] = {int32_t(syscall(SYS_gettid)), uint64_t(uc->uc_mcontext.pc), uint64_t(uc->uc_mcontext.regs[30])};
+    PcSample& out = g_pc[i];
+    out.tid = int32_t(syscall(SYS_gettid));
+    out.pc = uint64_t(uc->uc_mcontext.pc);
+    out.lr = StripPac(uint64_t(uc->uc_mcontext.regs[30]));
+    // Cadeia de frames: [fp] = fp anterior, [fp + 8] = retorno. Só dentro da pilha desta thread (entre sp e
+    // sp + 8 MB, alinhado, sempre subindo); fora disso para (o código sem frame pointer quebra a cadeia).
+    const uint64_t sp = uint64_t(uc->uc_mcontext.sp);
+    uint64_t fp = uint64_t(uc->uc_mcontext.regs[29]);
+    for (int k = 0; k < kFrames; k++) {
+      out.frames[k] = 0;
+      if (fp < sp || fp >= sp + (8u << 20) || (fp & 15)) continue;
+      uint64_t f[2];
+      if (!SafeRead(fp, f)) {
+        fp = 0;
+        continue;
+      }
+      out.frames[k] = StripPac(f[1]);
+      const uint64_t next = f[0];
+      if (next <= fp) {
+        fp = 0;
+        continue;
+      }
+      fp = next;
+    }
 #elif defined(__x86_64__)
-    g_pc[i] = {int32_t(syscall(SYS_gettid)), uint64_t(uc->uc_mcontext.gregs[REG_RIP]), 0};
+    g_pc[i] = {int32_t(syscall(SYS_gettid)), uint64_t(uc->uc_mcontext.gregs[REG_RIP]), 0, {}};
 #else
-    g_pc[i] = {int32_t(syscall(SYS_gettid)), 0, 0};
+    g_pc[i] = {int32_t(syscall(SYS_gettid)), 0, 0, {}};
 #endif
   } else {
     g_pc_lost.fetch_add(1, std::memory_order_relaxed);
@@ -292,12 +328,16 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
       if (it != cache.end()) return it->second;
       return cache.emplace(a, Symbolize(a)).first->second;
     };
+    std::map<int, std::map<std::string, uint64_t>> stacks;  // por thread: "função < chamador < ..."
     for (uint32_t i = 0; i < n; i++) {
       const PcSample& s = g_pc[i];
       const std::string& f = name_of(s.pc);
       all[f]++;
       per_thread[s.tid][f]++;
       if (s.lr) callers[name_of(s.lr)]++;
+      std::string st = f;
+      for (int k = 0; k < kFrames && s.frames[k]; k++) st += "  <  " + name_of(s.frames[k]);
+      stacks[s.tid][st]++;
     }
     std::snprintf(b, sizeof b, "funções: %u amostras de PC (%u perdidas) nas threads amostradas; %% das amostras:", n,
                   g_pc_lost.load());
@@ -321,6 +361,11 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
       for (const auto& [f, c] : TopNames(m, 10)) {
         std::snprintf(b, sizeof b, "    %5.1f%%  %s", 100.0 * double(c) / double(tot), f.c_str());
         line(b);
+      }
+      line("  pilhas mais frequentes (função  <  quem chamou  <  ...):");
+      for (const auto& [st, c] : TopNames(stacks[tid], 8)) {
+        std::snprintf(b, sizeof b, "    %5.1f%%  ", 100.0 * double(c) / double(tot));
+        line(std::string(b) + st);
       }
     }
   } else {

@@ -1,0 +1,22 @@
+--- a/src/core/threading_posix.cpp
++++ b/src/core/threading_posix.cpp
+@@ -1153,12 +1153,15 @@
+   if (deadline == std::chrono::steady_clock::time_point::max()) {
+     return kAlertablePollSlice;
+   }
+-  auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+-      deadline - std::chrono::steady_clock::now());
+-  if (remaining <= std::chrono::milliseconds::zero()) {
++  // Gtavport: rounded up. duration_cast truncated, so the last (partial) millisecond of every alertable
++  // timed wait became Wait(0) in a loop that only read the clock: a 1 ms wait (the GPU command
++  // processor's idle sleep, ~1000 a second) was a busy spin. On the Odin 2 the "GPU Commands" thread
++  // used 93% of a core, 96% of it in clock_gettime.
++  auto left = deadline - std::chrono::steady_clock::now();
++  if (left <= std::chrono::steady_clock::duration::zero()) {
+     return std::chrono::milliseconds::zero();
+   }
+-  return std::min(remaining, kAlertablePollSlice);
++  return std::min(std::chrono::ceil<std::chrono::milliseconds>(left), kAlertablePollSlice);
+ }
+ 
+ }  // namespace
