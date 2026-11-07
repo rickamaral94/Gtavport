@@ -550,6 +550,7 @@ void OnGpuFrame(uint64_t seq, double gpu_ms) {
 }
 
 void SetPassBreakdown(std::vector<std::pair<std::string, double>> passes, double total_ms) {
+  DiagOnPasses(passes, total_ms);
   std::lock_guard lock(g_mutex);
   g_passes = std::move(passes);
   g_passes_total = total_ms;

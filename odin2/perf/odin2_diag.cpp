@@ -76,12 +76,20 @@ bool g_menu_open_hint = false;
 
 // Quadros da medição
 struct FrameRec {
-  double interval, record, idle, gpu_wait;
+  double interval, record, idle, gpu_wait, submit;
   uint32_t draws;
   bool sampler_on;
 };
 std::vector<FrameRec> g_frames;
 std::vector<double> g_gpu;  // tempo de GPU por quadro (chega depois)
+// Linha do tempo (a cada 2 s) e os passes de GPU da janela de 300 quadros mais rápida e da mais lenta:
+// as travadas de GPU vêm em fases (11 ms -> 60 ms por quadro com os mesmos passes), e a média escondia.
+std::vector<std::string> g_timeline;
+size_t g_tl_frame = 0, g_tl_gpu = 0;
+double g_tl_start_ms = 0;
+std::vector<std::pair<std::string, double>> g_pass_best, g_pass_worst;
+double g_pass_best_total = 0, g_pass_worst_total = 0;
+std::string g_pass_flag_before;
 uint64_t g_nongame_frames = 0;
 
 // Amostras de PC (SIGPROF): anel sem lock, escrito pelo handler.
@@ -289,6 +297,32 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
     line(b);
   }
 
+  {
+    std::vector<std::string> tl;
+    std::vector<std::pair<std::string, double>> best, worst;
+    double bt, wt;
+    {
+      std::lock_guard lock(g_mutex);
+      tl.swap(g_timeline);
+      best.swap(g_pass_best);
+      worst.swap(g_pass_worst);
+      bt = g_pass_best_total;
+      wt = g_pass_worst_total;
+    }
+    line("linha do tempo (a cada ~2 s; tempo de jogo medido):");
+    for (const std::string& t : tl) line(t);
+    if (!worst.empty()) {
+      std::snprintf(b, sizeof b, "GPU por tipo de passe, ms por quadro: janela mais rápida (total %.1f) x mais lenta (total %.1f):", bt, wt);
+      line(b);
+      std::map<std::string, double> fast(best.begin(), best.end());
+      for (const auto& [k, v] : worst) {
+        auto it = fast.find(k);
+        std::snprintf(b, sizeof b, "  %6.2f -> %6.2f ms  %s", it == fast.end() ? 0.0 : it->second, v, k.c_str());
+        line(b);
+      }
+    }
+  }
+
   // Threads
   if (have_snaps) {
     const long hz = sysconf(_SC_CLK_TCK) > 0 ? sysconf(_SC_CLK_TCK) : 100;
@@ -435,6 +469,8 @@ void Run() {
       g_pc_n = 0;
       g_pc_lost = 0;
       REXLOG_INFO("[diag] medindo {} s de jogo; amostrando o PC de:{}", g_seconds, list.empty() ? " nenhuma" : list);
+      g_pass_flag_before = rex::cvar::GetFlagByName("gtav_native_pass_gpu_times");
+      rex::cvar::SetFlagByName("gtav_native_pass_gpu_times", "true");  // GPU por passe durante a medição
       block_start = now;
       g_sampler_on = true;
     }
@@ -454,6 +490,28 @@ void Run() {
         if (d.gpu_temp > 0) dev.temp.push_back(d.gpu_temp);
         if (d.headroom >= 0) dev.headroom.push_back(d.headroom);
         dev.thermal_max = std::max(dev.thermal_max, d.thermal_status);
+        // Linha do tempo: os quadros e tempos de GPU que chegaram desde a última linha.
+        std::lock_guard lock(g_mutex);
+        double sum = 0, gw = 0, sub = 0, gpu = 0, worst = 0;
+        size_t nf = g_frames.size() - std::min(g_tl_frame, g_frames.size());
+        for (size_t i = g_tl_frame; i < g_frames.size(); i++) {
+          sum += g_frames[i].interval;
+          gw += g_frames[i].gpu_wait;
+          sub += g_frames[i].submit;
+          worst = std::max(worst, g_frames[i].interval);
+        }
+        size_t ng = g_gpu.size() - std::min(g_tl_gpu, g_gpu.size());
+        for (size_t i = g_tl_gpu; i < g_gpu.size(); i++) gpu += g_gpu[i];
+        g_tl_frame = g_frames.size();
+        g_tl_gpu = g_gpu.size();
+        char b[256];
+        std::snprintf(b, sizeof b,
+                      "  %5.0f s  %5.1f fps  pior %4.0f ms | GPU %5.1f ms | renderer espera GPU %5.1f submit %5.1f ms | "
+                      "GPU %4.0f MHz uso %3.0f%% %4.0f °C | CPU prime %4.0f perf %4.0f MHz",
+                      g_game_ms / 1000.0, sum > 0 ? 1000.0 * double(nf) / sum : 0, worst, ng ? gpu / double(ng) : 0,
+                      nf ? gw / double(nf) : 0, nf ? sub / double(nf) : 0, d.gpu_mhz, d.gpu_busy, d.gpu_temp,
+                      d.cpu_mhz[0], d.cpu_mhz[1]);
+        g_timeline.push_back(b);
       }
       const bool sample = g_sampler_on.load();
       for (const auto& [tid, ts] : s.threads) {
@@ -488,6 +546,7 @@ void Run() {
       g_sampler_on = false;
       std::this_thread::sleep_for(std::chrono::milliseconds(20));  // sinais em voo
       const double window = nsnaps >= 2 ? std::chrono::duration<double, std::milli>(last.t - first.t).count() : 1;
+      rex::cvar::SetFlagByName("gtav_native_pass_gpu_times", g_pass_flag_before.empty() ? "false" : g_pass_flag_before);
       Report(std::move(acc), first, last, nsnaps >= 2, dev, window);
       g_state = State::kIdle;
       return;
@@ -507,6 +566,11 @@ void Arm(int seconds, const char* why, bool from_file, bool always = false) {
     g_game_ms = 0;
     g_frames.clear();
     g_gpu.clear();
+    g_timeline.clear();
+    g_tl_frame = g_tl_gpu = 0;
+    g_pass_best.clear();
+    g_pass_worst.clear();
+    g_pass_best_total = g_pass_worst_total = 0;
     g_nongame_frames = 0;
     g_armed_at = Clock::now();
   }
@@ -553,7 +617,7 @@ void DiagOnFrame(const FrameSample& s, bool menu_open) {
     g_nongame_frames++;
     return;
   }
-  g_frames.push_back({s.interval_ms, s.record_ms, s.idle_ms, s.gpu_wait_ms, s.draws, g_sampler_on.load()});
+  g_frames.push_back({s.interval_ms, s.record_ms, s.idle_ms, s.gpu_wait_ms, s.submit_ms, s.draws, g_sampler_on.load()});
   g_game_ms += s.interval_ms;
   if (g_game_ms >= g_seconds * 1000.0 || Clock::now() - g_rec_start > std::chrono::seconds(g_seconds * 3 + 30))
     g_state = State::kReporting;
@@ -563,6 +627,19 @@ void DiagOnGpu(double gpu_ms) {
   if (g_state.load(std::memory_order_relaxed) != State::kRecording || gpu_ms <= 0) return;
   std::lock_guard lock(g_mutex);
   g_gpu.push_back(gpu_ms);
+}
+
+void DiagOnPasses(const std::vector<std::pair<std::string, double>>& passes, double total_ms) {
+  if (g_state.load(std::memory_order_relaxed) != State::kRecording || passes.empty()) return;
+  std::lock_guard lock(g_mutex);
+  if (g_pass_best.empty() || total_ms < g_pass_best_total) {
+    g_pass_best = passes;
+    g_pass_best_total = total_ms;
+  }
+  if (g_pass_worst.empty() || total_ms > g_pass_worst_total) {
+    g_pass_worst = passes;
+    g_pass_worst_total = total_ms;
+  }
 }
 
 std::string DiagStatus() {

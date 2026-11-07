@@ -93,3 +93,13 @@ jogo: 89% -> 42% do quadro. GPU agora pesa: 22,8 ms/quadro (p95 97 ms), esperand
   dorme. Patch 0027: sentinela desligada (o laço usa SDL_WaitEvent).
 - Próximos alvos: a thread principal em `sub_8380CEF8` / `sub_83807DC8` (22% das amostras dela, possível espera
   ativa do jogo), `NtWaitForSingleObjectEx` com `sched_yield`, e os picos de GPU (p95 97 ms).
+
+### D2, terceira rodada (v0.2.8, dois relatórios de 07/11)
+- 06:31: **59,8 fps** (o limite de 60), p95 22 ms, GPU 11,1 ms; a SDLThread sumiu da lista.
+- 06:41: **27,4 fps**, p95 178 ms, gargalo **GPU**: 31,7 ms/quadro (p95 177). No gtav.log das duas sessões a GPU
+  começa a ~11 ms e entra em fases de 26-61 ms por quadro com os mesmos ~180 passes e ~1000 draws, e o tempo de envio
+  (submit) sobe junto (3 -> 50 ms); memória estável (caches iguais). A primeira sessão também teve isso, depois dos
+  60 s medidos. Causas candidatas: clock da GPU (temperatura 53-63 °C, sem status térmico do Android), um tipo de
+  passe que explode em certas cenas, algo do Turnip (envio/BOs). O relatório ganha a linha do tempo a cada 2 s (fps,
+  GPU, submit, MHz e temperatura) e o GPU por tipo de passe da janela mais rápida x mais lenta; o menu ganha a
+  gravação de 10 min. Próximo passo: comparar com o driver da Qualcomm na mesma cena.

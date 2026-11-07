@@ -1,9 +1,8 @@
 > [!WARNING]
-> **Pré-release em teste no aparelho.** D2, terceira correção: o laço de eventos do SDL (`SDLThread`) deixa de girar
-> (usava 83-99% de um núcleo, quase sempre o prime, ao lado da thread principal do jogo). Na v0.2.7, as duas primeiras
-> correções levaram o jogo de **11,8 para 31,1 fps** no Odin 2 (Turnip, mesma área). Antes: abre sempre no menu, Logs
-> de desempenho (60 s de jogo em `logs/`), idioma pt-BR, ícone/nome Gtavport, Sair do jogo pelo menu, atualizar sem
-> recompilar o jogo.
+> **Pré-release em teste no aparelho.** Com as correções do D2 o jogo chegou a **60 fps** no Odin 2 (Turnip), mas
+> em algumas fases a GPU fica 3-5x mais lenta. Esta versão traz o diagnóstico para elas: o relatório de **Logs de
+> desempenho** agora tem a linha do tempo (fps, GPU, envio, clocks e temperatura a cada 2 s) e o tempo de GPU por
+> tipo de passe na fase rápida x lenta, e o menu ganha a gravação de **10 min**.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.
