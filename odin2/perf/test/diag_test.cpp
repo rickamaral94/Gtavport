@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <chrono>
 #include <thread>
 
 #include <dlfcn.h>
@@ -65,10 +66,15 @@ int main(int argc, char** argv) {
   CHECK(ModuleOffset("/a/libx.so", 0x1234) == "libx.so+0x1200");
 
   // /proc: esta thread aparece, com CPU e estado.
-  volatile int spin = 0;
-  for (int i = 0; i < 20000000; i++) spin = spin + 1;
-  ProcSnapshot s = ProcTake();
+  // Gira até o /proc contar pelo menos um tick de CPU (10 ms): numa CPU rápida um laço fixo acabava antes.
   const int self = getpid();
+  volatile int spin = 0;
+  ProcSnapshot s;
+  const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  do {
+    for (int i = 0; i < 5000000; i++) spin = spin + 1;
+    s = ProcTake();
+  } while (s.threads[self].ticks == 0 && std::chrono::steady_clock::now() < until);
   CHECK(s.threads.count(self) == 1);
   CHECK(s.threads[self].ticks > 0);
   CHECK(s.threads[self].state == 'R');
