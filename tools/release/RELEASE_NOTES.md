@@ -1,9 +1,9 @@
 > [!WARNING]
-> **Pré-release em teste no aparelho.** Primeiras otimizações guiadas pelo relatório de desempenho (D2): as threads do
-> jogo **saem do núcleo único** onde todas estavam presas (herdavam a fixação da thread principal no prime) e a
-> espera de 1 ms do runtime **deixa de girar** lendo o relógio (a GPU emulada usava um núcleo inteiro nisso).
-> O relatório agora traz as pilhas de chamada. Antes: abre sempre no menu, Logs de desempenho (60 s de jogo em
-> `logs/`), idioma pt-BR, ícone/nome Gtavport, Sair do jogo pelo menu, atualizar sem recompilar o jogo.
+> **Pré-release em teste no aparelho.** D2, terceira correção: o laço de eventos do SDL (`SDLThread`) deixa de girar
+> (usava 83-99% de um núcleo, quase sempre o prime, ao lado da thread principal do jogo). Na v0.2.7, as duas primeiras
+> correções levaram o jogo de **11,8 para 31,1 fps** no Odin 2 (Turnip, mesma área). Antes: abre sempre no menu, Logs
+> de desempenho (60 s de jogo em `logs/`), idioma pt-BR, ícone/nome Gtavport, Sair do jogo pelo menu, atualizar sem
+> recompilar o jogo.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.

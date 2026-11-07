@@ -1,0 +1,17 @@
+--- a/src/ui/windowed_app_context_sdl.cpp
++++ b/src/ui/windowed_app_context_sdl.cpp
+@@ -70,6 +70,14 @@
+   }
+   wakeup_event_type_ = first;
+   paint_event_type_ = first + 1;
++#if REX_PLATFORM_ANDROID
++  // Gtavport: SDL_WaitEvent on Android never slept. Every wait loop pumps with a poll sentinel, pushing
++  // the sentinel wakes the waiter (SDL_SendWakeupEvent -> Android lifecycle WAKE), so the next wait
++  // returned at once and pumped again: the UI thread spun at 83-99% of a core, mostly in SDL's joystick
++  // detection (SDL_GetTicks / clock_gettime), on the prime core next to the game's main thread. The
++  // sentinel only marks the end of a SDL_PollEvent cycle; this loop uses SDL_WaitEvent.
++  SDL_SetEventEnabled(SDL_EVENT_POLL_SENTINEL, false);
++#endif
+   if (!SDL_AddEventWatch(WatchEvent, this)) {
+     REXLOG_ERROR("SDL_AddEventWatch failed: {}", SDL_GetError());
+     return false;

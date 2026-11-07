@@ -82,3 +82,14 @@ DLCs (combinado: depois do jogo rodar bem), geração de quadros (lsfg do TOTK: 
 4. **SDLThread a 99%** (63% em `clock_gettime`, átomos/mutex do SDL): sem pilha ainda. O amostrador agora tira a
    assinatura PAC dos endereços e segue a cadeia de frames (leitura segura via process_vm_readv): o próximo
    relatório traz as pilhas.
+
+### D2, segunda rodada (perf-diag de 07/11 05:00, v0.2.7, mesmas condições)
+**11,8 -> 31,1 fps** (p50 22 ms, p95 98 ms; nenhum quadro > 400 ms, eram 42). `GPU Commands` 93% -> 4,6% de um núcleo;
+a thread principal do jogo 8% -> 41,6% (ainda 47% na fila); as de trabalho saíram do prime. Renderer esperando o
+jogo: 89% -> 42% do quadro. GPU agora pesa: 22,8 ms/quadro (p95 97 ms), esperando a GPU 11,9 ms.
+- **SDLThread 83% (72% no prime, disputando com a thread principal):** as pilhas mostram
+  `SDL_WaitEventTimeoutNS > SDL_PumpEventsInternal > SDL_UpdateJoysticks > ... > clock_gettime`. Bug do SDL3 no
+  Android: cada volta da espera põe um POLL_SENTINEL na fila, pôr um evento acorda quem espera, e a espera nunca
+  dorme. Patch 0027: sentinela desligada (o laço usa SDL_WaitEvent).
+- Próximos alvos: a thread principal em `sub_8380CEF8` / `sub_83807DC8` (22% das amostras dela, possível espera
+  ativa do jogo), `NtWaitForSingleObjectEx` com `sched_yield`, e os picos de GPU (p95 97 ms).

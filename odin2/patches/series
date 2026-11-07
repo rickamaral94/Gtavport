@@ -27,3 +27,4 @@ gtav        0023-idioma-nas-configuracoes.patch
 gtav        0024-abrir-sempre-no-menu.patch
 rexglue-sdk 0025-espera-alertavel-sem-giro.patch
 gtav        0026-threads-do-jogo-fora-do-prime.patch
+rexglue-sdk 0027-laco-de-eventos-sem-giro.patch
