@@ -122,3 +122,17 @@ cada luz sombreava o volume inteiro em vez de só os pixels marcados no stencil.
 profundidade nem stencil usam uma cópia do shader com `EarlyFragmentTests` (mesma imagem: nada que o shader descarte
 muda os buffers); SPIR-V validado com spirv-val; fora do cache de pipelines salvo (como a variante _tiles2).
 `--gtav_native_early_tests` (ligado) e uma variante no "Comparar opções" para medir no aparelho.
+
+### D2, sexta rodada (A/B de 07/11 20:46, 10 min, cena da árvore de Natal)
+| variante | fps | GPU média | quadros > 100 ms |
+|---|---|---|---|
+| como está (v0.2.11, teste antes do shader) | 15,4 | 61,1 ms | 370 |
+| teste depois do shader (antes) | 13,4 | 71,2 ms | 395 |
+| sombras do sol por tile do jogo | 10,4 | 93,0 ms | 410 |
+| **tudo a 2x2** | **28,9** | **30,5 ms** | **21** |
+| barreiras completas | 11,6 | 82,9 ms | 386 |
+O teste antes do shader ajuda pouco (71 -> 61 ms); o custo é por pixel. Patch 0029: só os draws de luz (blend
+aditivo no alvo HDR com profundidade, sem gravar profundidade) a 2x2 (`--gtav_native_light_coarse=2`), com a taxa do
+passe restaurada logo depois de cada um; o resto da cena fica nítido. Patch 0030 + Configurações > Vídeo:
+"Iluminação das luzes" (Econômica 2x2 / Equilibrada 2x1 / Completa). O A/B passa a comparar luzes por pixel, teste
+antigo e tudo a 2x2.

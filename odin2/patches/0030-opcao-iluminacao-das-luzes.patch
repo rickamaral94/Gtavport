@@ -1,0 +1,22 @@
+--- a/gtav/src/native/menu.cpp
++++ b/gtav/src/native/menu.cpp
+@@ -64,6 +64,7 @@
+     "gtav_native_render_scale",
+     "gtav_native_max_anisotropy",  // Gtavport: também na tela de configurações do app
+     "user_language",               // Gtavport: idioma do jogo (XGetLanguage; vale no próximo início)
++    "gtav_native_light_coarse",    // Gtavport: luzes do deferred a 2x2 (vale na hora)
+ };
+ 
+ std::filesystem::path SettingsPath() { return ExeDir() / "gtav_settings.ini"; }
+@@ -148,6 +149,11 @@
+       changed = true;
+     }
+   }
++  static const char* const kLightValues[] = {"2", "1", "0"};
++  static const char* const kLightNames[] = {"Economical (2x2)", "Balanced (2x1)", "Full (every pixel)"};
++  combo("Light shading", "gtav_native_light_coarse", kLightValues, kLightNames, 3,
++        "Shading rate of the scene's lights (street lamps, neon, Christmas lights). Light is smooth, so 2x2 looks\n"
++        "almost the same and costs about half: rooms with many lights went from ~15 to ~29 fps on the Odin 2.");
+   static const char* const kLangValues[] = {"1", "9", "5", "4", "6", "3"};
+   static const char* const kLangNames[] = {"English", "Português (Brasil)", "Español", "Français", "Italiano", "Deutsch"};
+   combo("Game language", "user_language", kLangValues, kLangNames, 6,

@@ -29,3 +29,5 @@ rexglue-sdk 0025-espera-alertavel-sem-giro.patch
 gtav        0026-threads-do-jogo-fora-do-prime.patch
 rexglue-sdk 0027-laco-de-eventos-sem-giro.patch
 gtav        0028-teste-antes-do-shader.patch
+gtav        0029-luzes-com-sombreamento-2x2.patch
+gtav        0030-opcao-iluminacao-das-luzes.patch

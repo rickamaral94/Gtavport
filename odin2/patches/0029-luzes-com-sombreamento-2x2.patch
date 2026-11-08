@@ -1,0 +1,76 @@
+--- a/gtav/src/native/backend.cpp
++++ b/gtav/src/native/backend.cpp
+@@ -217,6 +217,13 @@
+ REXCVAR_DEFINE_BOOL(gtav_native_pass_gpu_times, false, "GTAV",
+                     "Native renderer diagnostic: GPU timestamps between render passes, logged every 300 frames "
+                     "as ms per frame by kind of pass");
++// Gtavport: the deferred lights (additive blending into the full-size HDR target, no depth writes) at a
++// coarser shading rate. A/B on the Odin 2 in a room with a lit Christmas tree: 2x2 shading everywhere
++// took the GPU from 61 to 30 ms per frame and the frames over 100 ms from 370 to 21; light is smooth, so
++// only these draws get it (textures and edges stay sharp). 0 = every pixel, 1 = 2x1, 2 = 2x2.
++REXCVAR_DEFINE_INT32(gtav_native_light_coarse, 2, "GTAV",
++                     "Native renderer: shade the deferred light draws at a coarser rate (0 = every pixel, 1 = 2x1, "
++                     "2 = 2x2; VK_KHR_fragment_shading_rate)");
+ REXCVAR_DEFINE_INT32(gtav_native_coarse_shading, 0, "GTAV",
+                      "Native renderer: shade the 3D passes (full-size targets with depth) at a coarser rate, "
+                      "a cheaper stand-in for a lower resolution: 0 = every pixel, 1 = 2x1 pixels, 2 = 2x2 "
+@@ -2786,6 +2793,9 @@
+   // Gtavport (--gtav_native_early_tests): the game pixel shader with OpExecutionMode EarlyFragmentTests
+   // added after its entry point (not for the tile override variant, nor shaders that write depth).
+   std::unordered_map<uint64_t, std::unique_ptr<RenderShader>> early_shaders;
++  // --gtav_native_light_coarse: pipelines of deferred-light draws, and the bound pass's own shading rate.
++  std::unordered_set<uint64_t> light_keys;
++  uint32_t pass_rate_w = 1, pass_rate_h = 1;
+   RenderShader* EarlyShader(uint64_t hash) {
+     if (TileOverride(hash)) return nullptr;
+     if (auto it = early_shaders.find(hash); it != early_shaders.end()) return it->second.get();
+@@ -3254,9 +3264,14 @@
+                                   count ? uint32_t(color[0]->format) : 0, depth ? " +depth" : "",
+                                   count && color[0]->msaa ? " msaa" : ""));
+     bound_fb = fb.get();
++    pass_rate_h = 1;
++    pass_rate_w = 1;
+     if (const int32_t coarse = REXCVAR_GET(gtav_native_coarse_shading); coarse > 0 && depth && count &&
+-        color[0]->width >= 640)
+-      list->setFragmentShadingRate(2, coarse >= 2 ? 2 : 1);
++        color[0]->width >= 640) {
++      pass_rate_w = 2;
++      pass_rate_h = coarse >= 2 ? 2 : 1;
++      list->setFragmentShadingRate(pass_rate_w, pass_rate_h);
++    }
+     pass_draws = 0;
+     for (uint32_t i = 0; i < 4; i++) bound_color[i] = i < count ? color[i] : nullptr;
+     bound_depth = depth;
+@@ -3655,6 +3670,12 @@
+       }
+     }
+     desc.depthTargetFormat = depth ? depth->format : RenderFormat::UNKNOWN;
++    // Deferred light: one full-size R16G16B16A16_FLOAT target with depth, additive (destination ONE),
++    // no depth writes.
++    if (count == 1 && depth && ps && color[0]->format == RenderFormat::R16G16B16A16_FLOAT && color[0]->width >= 640 &&
++        !desc.depthWriteEnabled && desc.renderTargetBlend[0].blendEnabled &&
++        desc.renderTargetBlend[0].dstBlend == RenderBlend::ONE && desc.renderTargetBlend[0].blendOp == RenderBlendOperation::ADD)
++      light_keys.insert(key);
+ 
+     // Input layout: the declaration's elements, plus zero inputs for every other location (the
+     // shader's declared inputs are not known here; unused ones are ignored).
+@@ -4705,6 +4726,19 @@
+       ds.pipeline = pipeline;
+       ds.bias_set = false;  // pipelines without dynamic depth bias overwrite it
+     }
++    // --gtav_native_light_coarse: coarser shading for this draw only; the pass's own rate comes back
++    // right after it (the state outlives the draw: blits and post-processing would inherit it).
++    struct RateRestore {
++      RenderCommandList* list = nullptr;
++      uint32_t w = 1, h = 1;
++      ~RateRestore() {
++        if (list) list->setFragmentShadingRate(w, h);
++      }
++    } rate_restore;
++    if (const int32_t lc = REXCVAR_GET(gtav_native_light_coarse); lc > 0 && light_keys.count(pkey)) {
++      list->setFragmentShadingRate(2, lc >= 2 ? 2 : 1);
++      rate_restore = {list, pass_rate_w, pass_rate_h};
++    }
+     if (depth) {
+       float bias[2];
+       PolygonOffset(r, d.primitive, bias);

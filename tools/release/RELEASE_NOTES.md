@@ -1,8 +1,8 @@
 > [!WARNING]
-> **Pré-release em teste no aparelho.** Correção para as travadas em cenas com muitas luzes (ex.: a árvore de Natal
-> piscando no escritório da Bobcat: 4 fps): cada luz sombreava o volume inteiro dela porque o teste de
-> profundidade/stencil acontecia depois do shader. Agora, onde é seguro, o teste vem antes. Para medir: **Logs de
-> desempenho > Comparar opções (A/B, 10 min)** compara também com o jeito antigo.
+> **Pré-release em teste no aparelho.** As luzes da cena (postes, neon, luzes de Natal) passam a ser sombreadas em
+> blocos de 2x2: na sala com a árvore de Natal piscando, o A/B no Odin 2 mostrou a GPU caindo de ~61 para ~30 ms e
+> as travadas acima de 100 ms de 370 para 21 em 10 min. A luz é suave, então a imagem fica quase igual; o resto da
+> cena continua nítido. Para voltar ao normal: **Configurações > Vídeo > Iluminação das luzes = Completa**.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.

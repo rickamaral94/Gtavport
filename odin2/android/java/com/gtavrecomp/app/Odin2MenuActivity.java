@@ -105,8 +105,8 @@ public class Odin2MenuActivity extends Odin2GtaActivity {
                 "Grava os primeiros 60 s (ou 10 min) de jogo (só jogo: sem menus, loading nem vídeos; começa após 5 s jogando) e salva "
                         + "o relatório na pasta logs, junto do gtav.log: perf-diag-<data>.txt. Traz fps, travadas, GPU, clocks, "
                         + "temperatura, CPU de cada thread e as funções do jogo onde o tempo vai. Um aviso no canto mostra a gravação. "
-                        + "Comparar opções: a cada 10 s troca uma opção gráfica suspeita (sombras do sol, sombreamento 2x2, "
-                        + "barreiras) e compara: a imagem pode mudar um pouco durante a gravação.",
+                        + "Comparar opções: a cada 10 s troca uma opção gráfica (luzes por pixel, teste de profundidade antigo, tudo a 2x2) "
+                        + "e compara: a imagem pode mudar um pouco durante a gravação.",
                 new String[] {"off", "next", "next600", "always", "ab"},
                 new String[] {"Desligado", "Próximo jogo (60 s)", "Próximo jogo (10 min)", "Em todo início (60 s)",
                         "Comparar opções (A/B, 10 min)"}, idx));

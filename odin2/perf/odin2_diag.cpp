@@ -92,10 +92,9 @@ struct Variant {
 };
 constexpr Variant kVariants[] = {
     {"como está", nullptr, nullptr},
+    {"luzes por pixel (light_coarse=0)", "gtav_native_light_coarse", "0"},
     {"teste depois do shader, como antes (early_tests=false)", "gtav_native_early_tests", "false"},
-    {"sombras do sol por tile do jogo (tile_penumbra_all=false)", "gtav_native_tile_penumbra_all", "false"},
-    {"sombreamento 2x2 (coarse_shading=2)", "gtav_native_coarse_shading", "2"},
-    {"barreiras completas (fragment_barriers=false)", "gtav_native_fragment_barriers", "false"},
+    {"tudo a 2x2 (coarse_shading=2)", "gtav_native_coarse_shading", "2"},
 };
 constexpr int kVariantCount = int(sizeof(kVariants) / sizeof(kVariants[0]));
 std::atomic<int> g_variant{0};
