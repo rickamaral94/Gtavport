@@ -1,8 +1,11 @@
 > [!WARNING]
-> **Pré-release em teste no aparelho.** As luzes da cena (postes, neon, luzes de Natal) passam a ser sombreadas em
-> blocos de 2x2: na sala com a árvore de Natal piscando, o A/B no Odin 2 mostrou a GPU caindo de ~61 para ~30 ms e
-> as travadas acima de 100 ms de 370 para 21 em 10 min. A luz é suave, então a imagem fica quase igual; o resto da
-> cena continua nítido. Para voltar ao normal: **Configurações > Vídeo > Iluminação das luzes = Completa**.
+> **Pré-release de teste.** Base atualizada para o gtav-recomp v0.4.0 (o jogo espera um shader que falta em vez
+> de pular o desenho: corrige partes escuras). `Sleep(0)` do jogo volta a ceder a CPU em vez de dormir 100 µs
+> (upstream `7cd394a`). **Correção:** a nota da v0.2.12 atribuiu às luzes a 2x2 um ganho que veio do 2x2 em todos
+> os passes; no A/B do Odin 2 as luzes a 2x2 não mudaram o desempenho, então o padrão volta a ser Completa. Novo
+> em Logs de desempenho: **Isolar o passe HDR (10 min)**, que desliga um shader da cena por vez para achar o que
+> trava a GPU. **Recompile o jogo uma vez** depois de instalar (a base mudou). Instala por cima da versão anterior
+> sem perder saves.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.
