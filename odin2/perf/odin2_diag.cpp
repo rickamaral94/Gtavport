@@ -29,6 +29,7 @@
 #include <rex/cvar.h>
 #include <rex/logging.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cerrno>
 #include <chrono>
@@ -86,20 +87,33 @@ std::vector<double> g_gpu;  // tempo de GPU por quadro (chega depois)
 // A/B ("Comparar" no app): a cada 10 s de medição troca uma opção suspeita e o relatório compara os lados.
 // Feito para as fases em que o passe principal (alvo HDR 1280x721 com profundidade) ia de ~3 ms a ~75 ms.
 struct Variant {
-  const char* name;
-  const char* cvar;   // nullptr: como está
-  const char* value;
+  std::string name;
+  std::string cvar;   // vazio: como está
+  std::string value;
 };
-constexpr Variant kVariants[] = {
-    {"como está", nullptr, nullptr},
-    {"luzes por pixel (light_coarse=0)", "gtav_native_light_coarse", "0"},
+const Variant kVariants[] = {
+    {"como está", "", ""},
+    {"luzes a 2x2 (light_coarse=2)", "gtav_native_light_coarse", "2"},
     {"teste depois do shader, como antes (early_tests=false)", "gtav_native_early_tests", "false"},
     {"tudo a 2x2 (coarse_shading=2)", "gtav_native_coarse_shading", "2"},
 };
-constexpr int kVariantCount = int(sizeof(kVariants) / sizeof(kVariants[0]));
+// Variantes da medição atual (A/B: as de cima; "hdr": como está + um pixel shader do passe HDR desligado
+// por vez) e a ordem do rodízio (índices em g_vars; "como está" volta a cada poucos blocos no modo hdr, para
+// a comparação não depender de o jogador ter mudado de cena).
+std::vector<Variant> g_vars;
+std::vector<int> g_schedule;
+size_t g_slot = 0;
 std::atomic<int> g_variant{0};
-std::string g_ab_saved[8];
+std::vector<std::string> g_ab_saved;
 bool g_ab = false;
+bool g_hdr = false;  // "hdr": censo dos pixel shaders do passe HDR e rodízio com cada um desligado
+// Censo (backend -> NoteHdrDraw): draws por pixel shader no alvo HDR (R16G16B16A16_FLOAT >= 640 + depth).
+std::mutex g_census_mutex;
+std::unordered_map<uint64_t, uint64_t> g_census;
+std::atomic<uint64_t> g_census_frames{0};
+std::atomic<bool> g_census_on{false};
+std::vector<std::pair<uint64_t, uint64_t>> CensusSorted();  // (pixel shader, draws), do que mais desenha
+constexpr size_t kHdrCandidates = 24;  // 24 x 10 s + "como está" a cada 4: ~5 min dos 10
 std::vector<std::pair<int, double>> g_gpu_variant;  // (variante, GPU ms)
 // Linha do tempo (a cada 2 s) e os passes de GPU da janela de 300 quadros mais rápida e da mais lenta:
 // as travadas de GPU vêm em fases (11 ms -> 60 ms por quadro com os mesmos passes), e a média escondia.
@@ -348,8 +362,10 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
       std::lock_guard lock(g_mutex);
       gv.swap(g_gpu_variant);
     }
-    line("comparar (A/B, 10 s cada, em rodízio): fps | p95 do quadro | GPU média e p95 | quadros > 100 ms");
-    for (int v = 0; v < kVariantCount; v++) {
+    line(g_hdr ? "passe HDR, um pixel shader desligado por vez (10 s cada; a imagem perde o que ele desenha): "
+                 "fps | p95 do quadro | GPU média e p95 | quadros > 100 ms"
+               : "comparar (A/B, 10 s cada, em rodízio): fps | p95 do quadro | GPU média e p95 | quadros > 100 ms");
+    for (int v = 0; v < int(g_vars.size()); v++) {
       std::vector<double> ivv, gg;
       size_t slow = 0;
       double tot = 0;
@@ -361,9 +377,23 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
         }
       for (const auto& [vv, ms] : gv)
         if (vv == v) gg.push_back(ms);
+      if (ivv.empty() && gg.empty()) continue;  // modo hdr: candidato que o tempo não alcançou
       std::snprintf(b, sizeof b, "  %5.1f fps | p95 %6.1f ms | GPU %5.1f / %6.1f ms | %4zu  %s",
                     tot > 0 ? 1000.0 * double(ivv.size()) / tot : 0, Percentile(ivv, 95), Mean(gg), Percentile(gg, 95), slow,
-                    kVariants[v].name);
+                    g_vars[v].name.c_str());
+      line(b);
+    }
+  }
+
+  if (g_hdr) {
+    const auto census = CensusSorted();
+    const double frames = double(std::max<uint64_t>(1, g_census_frames.load()));
+    std::snprintf(b, sizeof b, "censo do passe HDR: %zu pixel shaders em %.0f quadros (draws por quadro; os %zu primeiros "
+                  "entraram no rodízio)", census.size(), frames, kHdrCandidates);
+    line(b);
+    for (size_t i = 0; i < census.size() && i < 64; i++) {
+      std::snprintf(b, sizeof b, "  %016llX  %8.2f", static_cast<unsigned long long>(census[i].first),
+                    double(census[i].second) / frames);
       line(b);
     }
   }
@@ -466,6 +496,42 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
 }
 
 // Thread da medição: espera o jogo, amostra /proc a cada 50 ms, o aparelho a cada 2 s e conduz o amostrador.
+// Modo hdr: os pixel shaders do censo, do que mais desenha no alvo HDR ao que menos, cada um num bloco de
+// 10 s desligado (--gtav_native_skip_ps). Um shader que custa caro some do GPU quando desligado.
+std::vector<std::pair<uint64_t, uint64_t>> CensusSorted() {
+  std::vector<std::pair<uint64_t, uint64_t>> v;
+  {
+    std::lock_guard census(g_census_mutex);
+    v.assign(g_census.begin(), g_census.end());
+  }
+  std::sort(v.begin(), v.end(), [](const auto& a, const auto& b) { return a.second > b.second || (a.second == b.second && a.first < b.first); });
+  return v;
+}
+
+void BuildVariants() {
+  if (g_hdr) {
+    g_vars = {{"como está", "", ""}};
+    const auto census = CensusSorted();
+    const double frames = double(std::max<uint64_t>(1, g_census_frames.load()));
+    char b[96];
+    for (size_t i = 0; i < census.size() && i < kHdrCandidates; i++) {
+      char hx[20];
+      std::snprintf(hx, sizeof hx, "%016llX", static_cast<unsigned long long>(census[i].first));
+      const std::string hex = hx;
+      std::snprintf(b, sizeof b, "sem ps %s (%.1f draws/quadro)", hex.c_str(), double(census[i].second) / frames);
+      g_vars.push_back({b, "gtav_native_skip_ps", hex});
+    }
+  }
+  g_ab_saved.assign(g_vars.size(), std::string());
+  g_schedule.clear();
+  for (int v = 0; v < int(g_vars.size()); v++) {
+    if (g_hdr && v > 0 && (v - 1) % 4 == 0) g_schedule.push_back(0);  // "como está" de novo a cada 4
+    if (!g_hdr || v > 0) g_schedule.push_back(v);
+  }
+  g_slot = 0;
+  g_variant = g_schedule.empty() ? 0 : g_schedule[0];
+}
+
 void Run() {
   setpriority(PRIO_PROCESS, 0, -2);  // um pouco acima do normal: amostras a tempo (custa quase nada)
   FindClusters();
@@ -514,6 +580,7 @@ void Run() {
       g_pc_n = 0;
       g_pc_lost = 0;
       REXLOG_INFO("[diag] medindo {} s de jogo; amostrando o PC de:{}", g_seconds, list.empty() ? " nenhuma" : list);
+      if (g_ab) BuildVariants();
       g_pass_flag_before = rex::cvar::GetFlagByName("gtav_native_pass_gpu_times");
       rex::cvar::SetFlagByName("gtav_native_pass_gpu_times", "true");  // GPU por passe durante a medição
       block_start = now;
@@ -527,12 +594,14 @@ void Run() {
         block_start = now;
         // A/B: a cada 10 s (dois blocos) a próxima variante; volta a opção da anterior antes.
         static int blocks = 0;
-        if (g_ab && (++blocks % 2) == 0) {
-          const int cur = g_variant.load(), next = (cur + 1) % kVariantCount;
-          if (kVariants[cur].cvar) rex::cvar::SetFlagByName(kVariants[cur].cvar, g_ab_saved[cur]);
-          if (kVariants[next].cvar) {
-            g_ab_saved[next] = rex::cvar::GetFlagByName(kVariants[next].cvar);
-            rex::cvar::SetFlagByName(kVariants[next].cvar, kVariants[next].value);
+        if (g_ab && (++blocks % 2) == 0 && !g_schedule.empty()) {
+          const int cur = g_variant.load();
+          g_slot = (g_slot + 1) % g_schedule.size();
+          const int next = g_schedule[g_slot];
+          if (!g_vars[cur].cvar.empty()) rex::cvar::SetFlagByName(g_vars[cur].cvar, g_ab_saved[cur]);
+          if (!g_vars[next].cvar.empty()) {
+            g_ab_saved[next] = rex::cvar::GetFlagByName(g_vars[next].cvar);
+            rex::cvar::SetFlagByName(g_vars[next].cvar, g_vars[next].value);
           }
           g_variant = next;
         }
@@ -605,8 +674,12 @@ void Run() {
       rex::cvar::SetFlagByName("gtav_native_pass_gpu_times", g_pass_flag_before.empty() ? "false" : g_pass_flag_before);
       if (g_ab) {
         const int cur = g_variant.load();
-        if (kVariants[cur].cvar) rex::cvar::SetFlagByName(kVariants[cur].cvar, g_ab_saved[cur]);
+        if (!g_vars[cur].cvar.empty()) rex::cvar::SetFlagByName(g_vars[cur].cvar, g_ab_saved[cur]);
         g_variant = 0;
+      }
+      if (g_hdr) {
+        rex::cvar::SetFlagByName("gtav_native_hdr_census", "false");
+        g_census_on = false;
       }
       Report(std::move(acc), first, last, nsnaps >= 2, dev, window);
       g_state = State::kIdle;
@@ -633,7 +706,11 @@ void Arm(int seconds, const char* why, bool from_file, bool always = false) {
     g_pass_worst.clear();
     g_pass_best_total = g_pass_worst_total = 0;
     g_ab = false;
+    g_hdr = false;
     g_variant = 0;
+    g_slot = 0;
+    g_vars.assign(std::begin(kVariants), std::end(kVariants));
+    g_schedule.clear();
     g_gpu_variant.clear();
     g_nongame_frames = 0;
     g_armed_at = Clock::now();
@@ -658,15 +735,27 @@ void DiagCheckRequestFile() {
   if (seconds > 0) {
     Arm(std::min(seconds, 3600), mode == "always" ? "logs de desempenho em todo início (app)"
                                  : mode == "ab"   ? "comparar opções (A/B) no app"
+                                 : mode == "hdr"  ? "isolar o passe HDR (um pixel shader por vez) no app"
                                                   : "pedido no app",
         true, mode == "always");
     std::lock_guard lock(g_mutex);
-    g_ab = mode == "ab";
+    g_ab = mode == "ab" || mode == "hdr";
+    g_hdr = mode == "hdr";
+    if (g_hdr) {  // o censo começa já na espera (5 s de jogo), para o rodízio ter candidatos
+      {
+        std::lock_guard census(g_census_mutex);
+        g_census.clear();
+      }
+      g_census_frames = 0;
+      g_census_on = true;
+      rex::cvar::SetFlagByName("gtav_native_hdr_census", "true");
+    }
   }
   else std::filesystem::remove(f, ec);
 }
 
 void DiagOnFrame(const FrameSample& s, bool menu_open) {
+  if (g_census_on.load(std::memory_order_relaxed) && !menu_open && s.draws >= kGameplayDraws) g_census_frames++;
   const State st = g_state.load(std::memory_order_relaxed);
   if (st != State::kWaiting && st != State::kRecording) return;
   const bool game = !menu_open && s.draws >= kGameplayDraws && s.interval_ms < 5000;  // um quadro de 5 s+ é loading
@@ -691,6 +780,12 @@ void DiagOnFrame(const FrameSample& s, bool menu_open) {
   g_game_ms += s.interval_ms;
   if (g_game_ms >= g_seconds * 1000.0 || Clock::now() - g_rec_start > std::chrono::seconds(g_seconds * 3 + 30))
     g_state = State::kReporting;
+}
+
+void DiagNoteHdrDraw(uint64_t ps_hash) {
+  if (!g_census_on.load(std::memory_order_relaxed)) return;
+  std::lock_guard census(g_census_mutex);
+  g_census[ps_hash]++;
 }
 
 void DiagOnGpu(double gpu_ms) {
