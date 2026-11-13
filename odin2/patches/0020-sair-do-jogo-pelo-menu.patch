@@ -1,6 +1,8 @@
+diff --git a/gtav/src/native/menu.cpp b/gtav/src/native/menu.cpp
+index 3ba49ab..6601e29 100644
 --- a/gtav/src/native/menu.cpp
 +++ b/gtav/src/native/menu.cpp
-@@ -9,6 +9,10 @@
+@@ -12,6 +12,10 @@
  #include "odin2_perf.h"  // Gtavport: odin2/perf
  #include "shader_compiler.h"
  
@@ -11,7 +13,7 @@
  #include <imgui.h>
  #include <rex/cvar.h>
  #include <rex/logging.h>
-@@ -213,6 +217,67 @@
+@@ -237,6 +241,67 @@ ImGuiKey ToImGui(Key key) {
    return ImGuiKey_None;
  }
  
@@ -79,7 +81,7 @@
  void Build(uint32_t fps, double frame_ms) {
  #if defined(__APPLE__) && TARGET_OS_IPHONE
    // Centred: the screen's sides are under the rounded corners and the notch.
-@@ -229,6 +294,10 @@
+@@ -253,6 +318,10 @@ void Build(uint32_t fps, double frame_ms) {
    }
    ImGui::Text("%u fps  (%.1f ms per frame)", fps, frame_ms);
    ImGui::Separator();
@@ -90,6 +92,8 @@
  
    ImGui::TextUnformatted("Preset");
    if (ImGui::Button("Best image")) ApplyPreset(true);
+diff --git a/tools/android/app/AndroidManifest.xml b/tools/android/app/AndroidManifest.xml
+index 7e85fe6..a0e2a64 100644
 --- a/tools/android/app/AndroidManifest.xml
 +++ b/tools/android/app/AndroidManifest.xml
 @@ -44,6 +44,7 @@

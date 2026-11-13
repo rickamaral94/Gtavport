@@ -1,6 +1,6 @@
 # Versões fixadas. Mudar qualquer linha = commit próprio + rebuild + bench de regressão.
 # nome            url                                              commit/tag
-gtav-recomp       https://github.com/andrewnakas/gtav-recomp       2a76184f563e4b604a88bea8eeed1334e77f3220
+gtav-recomp       https://github.com/andrewnakas/gtav-recomp       e0999caa7b91206e7b9a7393d5342d35ef254154
 rexglue-sdk       https://github.com/rexglue/rexglue-sdk           f5337cd
 plume             https://github.com/renderbag/plume               0ce184b
 XenosRecomp       https://github.com/hedge-dev/XenosRecomp         990d03b

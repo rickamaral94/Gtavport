@@ -1,6 +1,8 @@
+diff --git a/tools/android/build_apk.sh b/tools/android/build_apk.sh
+index 1323fd6..bc91c15 100755
 --- a/tools/android/build_apk.sh
 +++ b/tools/android/build_apk.sh
-@@ -37,8 +37,10 @@
+@@ -37,8 +37,10 @@ if [ "${RELEASE:-0}" = 1 ]; then
    sed 's/ *android:debuggable="true"//' "$APP/AndroidManifest.xml" > "$OUT/AndroidManifest.release.xml"
    MANIFEST=$OUT/AndroidManifest.release.xml
  fi
@@ -12,7 +14,7 @@
  
  cp "${LIBS[@]}" "$SDK_LIB/librexruntime.so" "$SDK_LIB/librexgpu-xenos.so" \
     "$NDK_LIBCXX" stage/lib/arm64-v8a/
-@@ -52,8 +54,15 @@
+@@ -52,8 +54,15 @@ if [ ! -f "$KEY" ]; then
    keytool -genkeypair -keystore "$KEY" -storepass android -keypass android -alias androiddebugkey \
      -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" >/dev/null
  fi

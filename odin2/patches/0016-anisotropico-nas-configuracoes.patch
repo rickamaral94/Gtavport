@@ -1,14 +1,16 @@
+diff --git a/gtav/src/native/menu.cpp b/gtav/src/native/menu.cpp
+index 948b0df..3ba49ab 100644
 --- a/gtav/src/native/menu.cpp
 +++ b/gtav/src/native/menu.cpp
-@@ -58,6 +58,7 @@
+@@ -82,6 +82,7 @@ constexpr const char* kSettings[] = {
+     "odin2_antialias",
      "odin2_upscaler",
      "odin2_fsr_sharpness",
-     "gtav_native_render_scale",
 +    "gtav_native_max_anisotropy",  // Gtavport: também na tela de configurações do app
  };
  
  std::filesystem::path SettingsPath() { return ExeDir() / "gtav_settings.ini"; }
-@@ -142,6 +143,11 @@
+@@ -166,6 +167,11 @@ void BuildVideo(bool& changed) {
        changed = true;
      }
    }

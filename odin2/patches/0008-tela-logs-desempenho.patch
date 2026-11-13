@@ -1,16 +1,5 @@
---- a/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
-+++ b/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
-@@ -210,6 +210,10 @@
-             driver.setText("Graphics driver (Turnip / system)...");
-             driver.setOnClickListener(v -> startActivity(new Intent().setClassName(this, "com.gtavrecomp.app.Odin2DriverActivity")));
-             box.addView(driver);
-+            Button perf = new Button(this);
-+            perf.setText("Performance logs...");
-+            perf.setOnClickListener(v -> startActivity(new Intent().setClassName(this, "com.gtavrecomp.app.Odin2PerfLogsActivity")));
-+            box.addView(perf);
-         } catch (ClassNotFoundException e) {
-             // APK do upstream: sem seletor de driver
-         }
+diff --git a/tools/android/app/AndroidManifest.xml b/tools/android/app/AndroidManifest.xml
+index aaa4c33..b5804bf 100644
 --- a/tools/android/app/AndroidManifest.xml
 +++ b/tools/android/app/AndroidManifest.xml
 @@ -51,5 +51,11 @@
@@ -25,3 +14,18 @@
 +            android:configChanges="orientation|screenSize|keyboardHidden" />
      </application>
  </manifest>
+diff --git a/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java b/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
+index b7340fd..a2fa5bb 100644
+--- a/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
++++ b/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
+@@ -223,6 +223,10 @@ public class SetupActivity extends Activity {
+             driver.setText("Graphics driver (Turnip / system)...");
+             driver.setOnClickListener(v -> startActivity(new Intent().setClassName(this, "com.gtavrecomp.app.Odin2DriverActivity")));
+             box.addView(driver);
++            Button perf = new Button(this);
++            perf.setText("Performance logs...");
++            perf.setOnClickListener(v -> startActivity(new Intent().setClassName(this, "com.gtavrecomp.app.Odin2PerfLogsActivity")));
++            box.addView(perf);
+         } catch (ClassNotFoundException e) {
+             // APK do upstream: sem seletor de driver
+         }
