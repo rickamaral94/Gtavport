@@ -4,7 +4,7 @@
 > (upstream `7cd394a`). **Correção:** a nota da v0.2.12 atribuiu às luzes a 2x2 um ganho que veio do 2x2 em todos
 > os passes; no A/B do Odin 2 as luzes a 2x2 não mudaram o desempenho, então o padrão volta a ser Completa. Novo
 > em Logs de desempenho: **Isolar o passe HDR (10 min)**, que desliga um shader da cena por vez para achar o que
-> trava a GPU. **Recompile o jogo uma vez** depois de instalar (a base mudou). Instala por cima da versão anterior
+> trava a GPU. Se o app pedir, recompile o jogo uma vez (a base mudou). Instala por cima da versão anterior
 > sem perder saves.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
