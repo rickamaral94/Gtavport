@@ -29,3 +29,4 @@ rexglue-sdk 0027-laco-de-eventos-sem-giro.patch
 gtav        0028-teste-antes-do-shader.patch
 gtav        0029-luzes-com-sombreamento-2x2.patch
 gtav        0030-opcao-iluminacao-das-luzes.patch
+rexglue-sdk 0031-sleep0-cede-a-cpu.patch
