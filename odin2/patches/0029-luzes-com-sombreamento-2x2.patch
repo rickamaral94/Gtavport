@@ -7,10 +7,10 @@ index 3020ad7..dfbf05f 100644
                      "Native renderer diagnostic: GPU timestamps between render passes, logged every 300 frames "
                      "as ms per frame by kind of pass");
 +// Gtavport: the deferred lights (additive blending into the full-size HDR target, no depth writes) at a
-+// coarser shading rate. A/B on the Odin 2 in a room with a lit Christmas tree: 2x2 shading everywhere
-+// took the GPU from 61 to 30 ms per frame and the frames over 100 ms from 370 to 21; light is smooth, so
-+// only these draws get it (textures and edges stay sharp). 0 = every pixel, 1 = 2x1, 2 = 2x2.
-+REXCVAR_DEFINE_INT32(gtav_native_light_coarse, 2, "GTAV",
++// coarser shading rate. Off by default: the Odin 2 A/B (logs_6, 10 min, Christmas-tree room) measured
++// 13.9 fps with it and 13.7 without, GPU 68.3 vs 68.8 ms; the 61->30 ms gain came from 2x2 on ALL 3D
++// passes (gtav_native_coarse_shading=2), not from the lights. 0 = every pixel, 1 = 2x1, 2 = 2x2.
++REXCVAR_DEFINE_INT32(gtav_native_light_coarse, 0, "GTAV",
 +                     "Native renderer: shade the deferred light draws at a coarser rate (0 = every pixel, 1 = 2x1, "
 +                     "2 = 2x2; VK_KHR_fragment_shading_rate)");
  REXCVAR_DEFINE_INT32(gtav_native_coarse_shading, 0, "GTAV",

@@ -28,7 +28,7 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
             {"gtav_native_render_scale", "0.75"}, {"odin2_upscaler", "bilinear"}, {"odin2_fsr_sharpness", "0.2"},
             {"odin2_antialias", "off"}, {"gtav_native_max_anisotropy", "16"}, {"gtav_native_vsync", "true"},
             {"gtav_fps_limit", "30"}, {"gtav_native_fps", "false"}, {"gtav_touch_controls", "true"},
-            {"gtav_native_async_pipelines", "true"}, {"user_language", "1"}, {"gtav_native_light_coarse", "2"},
+            {"gtav_native_async_pipelines", "true"}, {"user_language", "1"}, {"gtav_native_light_coarse", "0"},
     };
 
     @Override
@@ -121,9 +121,9 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
                 "Suaviza o serrilhado das bordas. FXAA: uma passada, leve, um pouco mais suave. SMAA 1x: três passadas, bordas mais nítidas, usa mais GPU.",
                 new String[] {"off", "fxaa", "smaa"}, new String[] {"Desligado", "FXAA", "SMAA 1x"});
         opt(v, "gtav_native_light_coarse", "Iluminação das luzes",
-                "Taxa de sombreamento das luzes da cena (postes, neon, luzes de Natal). A luz é suave: em 2x2 fica quase igual "
-                        + "e custa metade (uma sala com muitas luzes foi de ~15 para ~29 fps no Odin 2).",
-                new String[] {"2", "1", "0"}, new String[] {"Econômica (2x2)", "Equilibrada (2x1)", "Completa (por pixel)"});
+                "Taxa de sombreamento das luzes da cena (postes, neon, luzes de Natal). Experimental: no A/B do Odin 2 "
+                        + "não mudou o desempenho (13,7 para 13,9 fps), por isso o padrão é Completa.",
+                new String[] {"0", "1", "2"}, new String[] {"Completa (por pixel)", "Equilibrada (2x1)", "Econômica (2x2)"});
         opt(v, "gtav_native_max_anisotropy", "Filtro anisotrópico",
                 "Nitidez das texturas vistas de lado (chão, ruas ao longe). Diminua se a GPU for o gargalo.",
                 new String[] {"1", "2", "4", "8", "16"}, new String[] {"Desligado", "2x", "4x", "8x", "16x"});

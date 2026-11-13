@@ -14,11 +14,11 @@ index fc1add7..ba76232 100644
        changed = true;
      }
    }
-+  static const char* const kLightValues[] = {"2", "1", "0"};
-+  static const char* const kLightNames[] = {"Economical (2x2)", "Balanced (2x1)", "Full (every pixel)"};
++  static const char* const kLightValues[] = {"0", "1", "2"};
++  static const char* const kLightNames[] = {"Full (every pixel)", "Balanced (2x1)", "Economical (2x2)"};
 +  combo("Light shading", "gtav_native_light_coarse", kLightValues, kLightNames, 3,
-+        "Shading rate of the scene's lights (street lamps, neon, Christmas lights). Light is smooth, so 2x2 looks\n"
-+        "almost the same and costs about half: rooms with many lights went from ~15 to ~29 fps on the Odin 2.");
++        "Shading rate of the scene's lights (street lamps, neon, Christmas lights). Experimental: on the Odin 2\n"
++        "A/B it made no measurable difference (13.7 -> 13.9 fps), so the default is Full.");
    static const char* const kAnisoValues[] = {"1", "2", "4", "8", "16"};
    static const char* const kAnisoNames[] = {"Off", "2x", "4x", "8x", "16x"};
    combo("Anisotropic filtering", "gtav_native_max_anisotropy", kAnisoValues, kAnisoNames, 5,

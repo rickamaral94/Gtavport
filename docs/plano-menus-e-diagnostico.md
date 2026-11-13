@@ -136,3 +136,8 @@ aditivo no alvo HDR com profundidade, sem gravar profundidade) a 2x2 (`--gtav_na
 passe restaurada logo depois de cada um; o resto da cena fica nítido. Patch 0030 + Configurações > Vídeo:
 "Iluminação das luzes" (Econômica 2x2 / Equilibrada 2x1 / Completa). O A/B passa a comparar luzes por pixel, teste
 antigo e tudo a 2x2.
+
+**Correção (13/11, logs_6):** o A/B de 10 min da v0.2.12 mediu luzes a 2x2 13,9 fps / GPU 68,3 ms contra
+13,7 / 68,8 por pixel: sem efeito. O ganho de 61 → 30 ms era do 2x2 em todos os passes 3D. O padrão de
+`gtav_native_light_coarse` volta a 0 (a opção continua no menu) e o próximo passo é o modo "Isolar o passe
+HDR" (patch 0032). Detalhes em `docs/revisao-ports.md`.
