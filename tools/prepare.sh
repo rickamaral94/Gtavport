@@ -42,11 +42,20 @@ cp -a "$W/deps/XenosRecomp" "$W/gtav/thirdparty/XenosRecomp"
 
 dir_of() { case $1 in gtav) echo "$W/gtav";; rexglue-sdk) echo "$W/gtav/rexglue-sdk";;
   plume|XenosRecomp) echo "$W/gtav/thirdparty/$1";; *) echo "alvo desconhecido: $1" >&2; exit 1;; esac; }
+# work/gtav vem de um git archive (sem .git) e fica dentro deste repositório: sem o teto, o git apply acharia o
+# repositório do Gtavport, leria os caminhos do patch a partir da raiz dele e pularia tudo ("Skipped patch") com
+# código 0. Com o teto em work/, só o .git da própria árvore (rexglue-sdk, plume...) conta.
+export GIT_CEILING_DIRECTORIES=$W
 apply() {  # alvo patch
   local d; d=$(dir_of "$1")
   if ! git -C "$d" apply --whitespace=nowarn "$2" 2>/dev/null; then
     git -C "$d" apply --3way --whitespace=nowarn "$2" || { echo "FALHOU: $2 em $1" >&2; exit 1; }
   fi
+  # Um patch pulado sai com código 0: confere que cada arquivo novo/alterado chegou à árvore.
+  local f
+  for f in $(sed -n 's#^+++ b/##p' "$2" | cut -f1); do
+    [ -e "$d/$f" ] || { echo "FALHOU: $(basename "$2") não chegou a $1/$f" >&2; exit 1; }
+  done
   echo "  ok $1 <- $(basename "$2")"
 }
 echo "patches do upstream:"
