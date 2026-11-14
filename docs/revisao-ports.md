@@ -86,6 +86,22 @@ Adiado com motivo: **R1 1080p** (escalas 1,25/1,5). A GPU já fica 99 % ocupada 
 medida; subir a resolução agora só piora a meta de 30 fps, e o caminho de upscaler (FSR/SGSR) foi feito para
 ampliar, não reduzir. Volta depois que o passe HDR estiver resolvido.
 
+## 3b. Resultado no Odin: o passe HDR lento é só do Turnip (14/11, validado no Odin)
+
+Mesmo APK (v0.3.0-pre1), mesmo local e opções iguais (60 fps, escala 1,0, FXAA + SGSR1), 60 s cada:
+
+| | Turnip Amaral v5.9.18.1 (Mesa a6aacf6b0f), logs_7 | Driver do sistema (Qualcomm 12/23), logs_8 |
+|---|---|---|
+| fps / p99 | 21,6 / 305 ms | **59,9 / 22 ms** |
+| Quadros > 100 ms | 140 | **0** |
+| GPU por quadro (média / p95) | 42,0 / 299,8 ms | 12,4 / 13,0 ms |
+| Passe 1280x721 RGBA16F + depth | 3,4 → 83,7 ms | 2,4 → 2,7 ms |
+
+A GPU ficou em 680 MHz, a 61–64 °C, sem throttling, então não é térmica. Os relatórios anteriores (logs_5/6) também
+eram Turnip (Mesa fd8ef2b). A causa dos quadros de ~300 ms está no Turnip/ir3, não no Gtavport: a investigação
+segue com o agente Turnip (PR #2). Até lá, **use o driver do sistema**. Nele o gargalo passa a ser a thread
+de render (~9,7 ms por quadro, a 60 fps).
+
 ## 4. O que ainda precisa ser medido (no Odin 2)
 
 1. **Isolar o passe HDR** (Menu > Logs de desempenho > "Isolar o passe HDR (10 min)") parado na sala da árvore
