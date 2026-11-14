@@ -1,0 +1,18 @@
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -4904,10 +4904,11 @@
+         }
+ 
+         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+-        appInfo.pApplicationName = "plume";
+-        appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+-        appInfo.pEngineName = "plume";
+-        appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
++        // Gtavport: identifica o app para o driver (perfis driconf do Turnip/Mesa, relatórios, CTS).
++        appInfo.pApplicationName = "Gtavport";
++        appInfo.applicationVersion = VK_MAKE_VERSION(0, 3, 0);
++        appInfo.pEngineName = "gtav-recomp";
++        appInfo.engineVersion = VK_MAKE_VERSION(0, 4, 0);
+         appInfo.apiVersion = VK_API_VERSION_1_2;
+ 
+         VkInstanceCreateInfo createInfo = {};

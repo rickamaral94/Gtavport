@@ -32,7 +32,13 @@
 #include <thread>
 
 #include <dlfcn.h>
+#include <sys/utsname.h>
 #include <unistd.h>
+#ifdef __ANDROID__
+#include <sys/system_properties.h>
+#endif
+
+extern char** environ;
 
 namespace gtav::native::perf {
 
@@ -321,14 +327,30 @@ std::string Settings() {
   s += " render_scale=" + g("gtav_native_render_scale");
   s += " antialias=" + g("odin2_antialias") + " upscaler=" + g("odin2_upscaler");
   s += " async_pipelines=" + g("gtav_native_async_pipelines") + " gpu_lag_ms=" + g("gpu_skip_rendering_lag_ms");
+  s += " early_tests=" + g("gtav_native_early_tests") + " coarse_shading=" + g("gtav_native_coarse_shading");
+  s += " light_coarse=" + g("gtav_native_light_coarse") + " anisotropy=" + g("gtav_native_max_anisotropy");
   return s;
 }
 
+// Variáveis que mudam o driver: as do Gtavport (ODIN2_VK_DRIVER) e todas as do Mesa/Turnip/ir3/freedreno.
 std::string EnvLine() {
   std::string s;
-  for (const char* k : {"ODIN2_VK_DRIVER", "TU_DEBUG", "MESA_VK_ABORT_ON_DEVICE_LOSS", "FD_DEV_FEATURES"})
-    if (const char* v = std::getenv(k)) s += std::string(k) + "=" + v + " ";
+  for (char** e = environ; e && *e; ++e) {
+    const std::string kv = *e;
+    for (const char* pre : {"ODIN2_VK_DRIVER=", "TU_", "IR3_", "MESA_", "FD_", "ADRENOTOOLS"})
+      if (kv.rfind(pre, 0) == 0) {
+        s += kv + " ";
+        break;
+      }
+  }
   return s.empty() ? "(nenhuma)" : s;
+}
+
+std::string ReadSmall(const char* path) {
+  std::ifstream f(path);
+  std::string s((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  while (!s.empty() && (s.back() == '\n' || s.back() == ' ')) s.pop_back();
+  return s;
 }
 
 std::string Summary(const std::vector<Frame>& v, double secs, double cap_ms) {
@@ -515,6 +537,45 @@ DeviceSample LatestDevice() {
   d.thermal_status = g_sensors.thermal_status;
   d.rss_mb = g_sensors.rss_mb;
   return d;
+}
+
+std::string SystemDescription() {
+  std::string s;
+#ifdef __ANDROID__
+  auto prop = [](const char* k) {
+    char v[PROP_VALUE_MAX] = {};
+    __system_property_get(k, v);
+    return std::string(v[0] ? v : "?");
+  };
+  s += "Android " + prop("ro.build.version.release") + " (API " + prop("ro.build.version.sdk") + ", " +
+       prop("ro.product.manufacturer") + " " + prop("ro.product.model") + ", build " + prop("ro.build.id") + ")";
+#endif
+  utsname u{};
+  if (uname(&u) == 0) s += std::string(s.empty() ? "" : " | ") + "kernel " + u.release;
+  const std::string model = ReadSmall("/sys/class/kgsl/kgsl-3d0/gpu_model");
+  s += " | kgsl gpu_model " + (model.empty() ? std::string("n/d") : model);
+  return s;
+}
+
+std::string DriverDescription() {
+  std::string driver;
+  {
+    std::lock_guard lock(g_mutex);
+    driver = g_driver_json;
+  }
+  std::string s = "pedido/efetivo: ";
+  if (const char* f = std::getenv("ODIN2_VK_STATUS_FILE")) {
+    std::string st = ReadSmall(f);
+    for (char& c : st)
+      if (c == '\n') c = ' ';
+    s += st.empty() ? "n/d" : st;
+  } else {
+    s += "n/d";
+  }
+  s += " | " + JsonField(driver, "driverName") + " " + JsonField(driver, "driverInfo") + " | Vulkan " +
+       JsonField(driver, "api") + " | driverID " + JsonField(driver, "driverID") + " | conformance " +
+       JsonField(driver, "conformance") + " | aberto: " + JsonField(driver, "loadedLibs");
+  return s;
 }
 
 std::string RunDescription() {

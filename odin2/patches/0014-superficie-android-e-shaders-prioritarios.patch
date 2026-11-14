@@ -1,6 +1,8 @@
+diff --git a/gtav/src/native/backend.cpp b/gtav/src/native/backend.cpp
+index e0b4cc6..af8cecd 100644
 --- a/gtav/src/native/backend.cpp
 +++ b/gtav/src/native/backend.cpp
-@@ -3667,6 +3667,11 @@
+@@ -3682,6 +3682,11 @@ struct Backend::Impl {
      return (pipelines[key] = std::move(result)).get();
    }
  
@@ -12,7 +14,7 @@
    void NoteLost(uint32_t& counter, const char* what, const DrawCommand& d, const uint8_t* r) {
      if (!counter++ && lost_first.empty())
        lost_first = fmt::format("{} (vs {:016X} ps {:016X}, rt0 {:03X}, {} indices)", what, d.vs_hash, d.ps_hash,
-@@ -4097,13 +4102,20 @@
+@@ -4112,13 +4117,20 @@ struct Backend::Impl {
      RenderShader* ps = Shader(d.ps_hash, true);
      if (!vs || d.count == 0 || d.element_count == 0) {
        stat_skipped++;
@@ -35,9 +37,11 @@
      RenderTopologyInfo topo = Topology(d.primitive);
      if (topo.skip) {
        stat_skipped++;
+diff --git a/gtav/src/native/renderer.cpp b/gtav/src/native/renderer.cpp
+index 70aa462..e9f6d06 100644
 --- a/gtav/src/native/renderer.cpp
 +++ b/gtav/src/native/renderer.cpp
-@@ -97,6 +97,31 @@
+@@ -105,6 +105,31 @@ extern bool g_colorInputAttachments;
  #ifdef __ANDROID__
  #include <sched.h>
  #include <unistd.h>
@@ -69,7 +73,7 @@
  // Phones mix core sizes (Snapdragon 8 Gen 1: 4 little, 3 mid, 1 prime). The scheduler kept moving
  // the renderer threads onto little cores, where recording a frame takes about 3x as long: keep
  // them on the cores of the top two clusters (the upper half of the CPU numbers), except the last
-@@ -488,8 +513,13 @@
+@@ -683,8 +708,13 @@ class Renderer {
            }
            if (r->window_) {
              SDL_ShowWindow(r->window_);
@@ -85,7 +89,7 @@
            }
  #elif defined(__APPLE__) && TARGET_OS_IPHONE
            // iOS has one window (fullscreen): draw into the SDK's own, with a Metal view of our own
-@@ -629,6 +659,8 @@
+@@ -867,6 +897,8 @@ class Renderer {
    // Nothing is presented until SDL reports a window again; then the swap chain (and its VkSurface)
    // is rebuilt on it. Frames recorded meanwhile are skipped like a minimized window's.
    bool SurfaceReady() {
@@ -94,7 +98,7 @@
      auto* now = static_cast<ANativeWindow*>(SDL_GetPointerProperty(
          SDL_GetWindowProperties(window_), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr));
      if (!surface_lost_ && now == render_window_) return true;
-@@ -639,12 +671,22 @@
+@@ -877,12 +909,22 @@ class Renderer {
        return false;
      }
      auto t = std::chrono::steady_clock::now();
@@ -118,7 +122,7 @@
      surface_retry_ = t;
      surface_attempts_++;
      RetireAll();  // also drains the submit thread (it presents on the old swap chain)
-@@ -653,7 +695,8 @@
+@@ -891,7 +933,8 @@ class Renderer {
      {
        std::lock_guard lock(present_mutex_);
        swapchain_.reset();  // destroys the old VkSurface before one is made on the window again
@@ -128,7 +132,7 @@
        swapchain_ = queue_cmd_->createSwapChain(plume::RenderSwapChainDesc(render_window_, kSwapchainFormat,
                                                                            kSwapchainBuffers));
        swapchain_->setVsyncEnabled(vsync_);
-@@ -1149,6 +1192,7 @@
+@@ -1415,6 +1458,7 @@ class Renderer {
        acquired = swapchain_->acquireTexture(acquires_[slot].get(), &image);
      }
  #ifdef __ANDROID__
@@ -136,39 +140,22 @@
      if (!acquired) surface_lost_ = true;  // (VK_ERROR_SURFACE_LOST_KHR): SurfaceReady rebuilds it
  #endif
      if (!acquired) {
+diff --git a/gtav/src/native/shader_compiler.cpp b/gtav/src/native/shader_compiler.cpp
+index 032fc8f..1da90fc 100644
 --- a/gtav/src/native/shader_compiler.cpp
 +++ b/gtav/src/native/shader_compiler.cpp
-@@ -62,6 +62,10 @@
- std::deque<std::string> g_queue;  // shader names ("ps_<HASH>")
- std::unordered_set<std::string> g_seen;
- std::unordered_set<std::string> g_present;  // .spv on disk: found at intake or compiled since
-+// Gtavport: shaders a draw is waiting for (PrioritizeShader): translated before the rest of the
-+// queue. A first boot queues ~3600 shaders in creation order; the screen stayed black for minutes
-+// while the few the loading screen draws with sat behind the others.
-+std::unordered_set<std::string> g_wanted;
- std::atomic<uint32_t> g_ok{0}, g_failed{0};
- std::atomic<uint32_t> g_busy{0};  // Gtavport: shaders being translated right now
- bool g_started = false;
-@@ -307,7 +311,8 @@
-     REXLOG_INFO("[native] shader compiler: {} workers", workers);
-     for (int i = 0; i < workers; i++) std::thread(Worker).detach();
-   }
--  g_queue.push_back(name);
-+  if (g_wanted.count(name)) g_queue.push_front(name);
-+  else g_queue.push_back(name);
-   g_cv.notify_one();
+@@ -378,6 +378,18 @@ void ShaderQueueStatus(uint32_t* done, uint32_t* pending) {
+   *pending = g_pending.load(std::memory_order_relaxed);
  }
  
-@@ -321,6 +326,16 @@
-   *pending = uint32_t(g_queue.size()) + g_busy.load() + uint32_t(g_intake.size());
- }
- 
++// Gtavport: a draw is missing this shader: to the front of the queue (no wait; WaitForShader is the
++// upstream's blocking version, used when the shader is first looked up).
 +void PrioritizeShader(uint64_t hash, bool pixel) {
 +  std::string name = fmt::format("{}_{:016X}", pixel ? "ps" : "vs", hash);
 +  std::lock_guard lock(g_mutex);
-+  if (g_present.count(name) || !g_wanted.insert(name).second) return;
++  if (g_present.count(name)) return;
 +  auto it = std::find(g_queue.begin(), g_queue.end(), name);
-+  if (it == g_queue.end()) return;  // still at intake (Enqueue puts it first) or being translated
++  if (it == g_queue.end() || it == g_queue.begin()) return;
 +  g_queue.erase(it);
 +  g_queue.push_front(std::move(name));
 +}
@@ -176,13 +163,16 @@
  bool ShaderOnDisk(const std::string& name) {
    std::lock_guard lock(g_mutex);
    return g_present.count(name) != 0;
+diff --git a/gtav/src/native/shader_compiler.h b/gtav/src/native/shader_compiler.h
+index bcf65e6..4a75f44 100644
 --- a/gtav/src/native/shader_compiler.h
 +++ b/gtav/src/native/shader_compiler.h
-@@ -17,5 +17,7 @@
+@@ -18,6 +18,8 @@ uint64_t CompileGeneration();
  bool ShaderOnDisk(const std::string& name);
  // Gtavport: shaders translated since start and still waiting or in translation (on-screen notice).
  void ShaderQueueStatus(uint32_t* done, uint32_t* pending);
 +// Gtavport: a draw is waiting for this shader: translate it before the rest of the queue.
 +void PrioritizeShader(uint64_t hash, bool pixel);
  
- }  // namespace gtav::native
+ // Render thread: <name> (e.g. "ps_<HASH>") was created by the game but its SPIR-V is still being
+ // made: move it to the front of the queue and wait for it (up to timeout_ms). True once the .spv is

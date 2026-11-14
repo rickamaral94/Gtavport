@@ -1,3 +1,5 @@
+diff --git a/gtav/src/android_threads.cpp b/gtav/src/android_threads.cpp
+index 0d62a54..e7f5b39 100644
 --- a/gtav/src/android_threads.cpp
 +++ b/gtav/src/android_threads.cpp
 @@ -25,9 +25,36 @@
@@ -37,7 +39,7 @@
  bool SetAffinity(int tid, int first, int last) {
    cpu_set_t set;
    CPU_ZERO(&set);
-@@ -68,6 +95,15 @@
+@@ -68,6 +95,15 @@ const bool g_main_pinner = [] {
        if (!tid) tid = FindMainThread();
        if (!tid) continue;
        const int want = REXCVAR_GET(gtav_android_main_prime) ? 1 : 0;

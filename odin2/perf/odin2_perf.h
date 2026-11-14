@@ -40,12 +40,15 @@ struct DeviceSample {
 DeviceSample LatestDevice();
 // Aparelho, driver e configurações numa linha (cabeçalho dos relatórios).
 std::string RunDescription();
+std::string SystemDescription();  // Android, kernel, gpu_model do KGSL
+std::string DriverDescription();  // pedido/efetivo (e o motivo), driverID, arquivo aberto: build-id e SHA-256
 
 // "Medir desempenho" (odin2_diag.cpp, ideia do diagnóstico do TOTK/BOTW).
 void DiagRequest(int seconds);           // menu do jogo
 void DiagCheckRequestFile();             // diag_request.txt deixado pela tela Configurações do app
 void DiagOnFrame(const FrameSample& s, bool menu_open);
 void DiagOnGpu(double gpu_ms);
+void DiagNoteHdrDraw(uint64_t ps_hash);    // backend, com --gtav_native_hdr_census: draw no alvo HDR
 void DiagOnPasses(const std::vector<std::pair<std::string, double>>& passes, double total_ms);
 std::string DiagStatus();                // "" parado; senão a linha do aviso na tela
 std::string DiagLastReport();
