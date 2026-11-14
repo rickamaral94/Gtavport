@@ -31,3 +31,4 @@ gtav        0029-luzes-com-sombreamento-2x2.patch
 gtav        0030-opcao-iluminacao-das-luzes.patch
 rexglue-sdk 0031-sleep0-cede-a-cpu.patch
 gtav        0032-censo-do-passe-hdr.patch
+plume       0033-nome-do-app-no-vulkan.patch
