@@ -94,7 +94,24 @@ ampliar, não reduzir. Volta depois que o passe HDR estiver resolvido.
    (laço longo no shader traduzido, constantes de laço depois da correção de UBO do Adreno, ou custo real).
 2. **Sleep(0)**: "Logs de desempenho (10 min)" no mesmo lugar e numa rua com trânsito; comparar CPU da thread
    principal e a fatia de `nanosleep` com o relatório da v0.2.12.
-3. Protocolo completo abaixo.
+3. **Driver no passe HDR** (sugestões do agente Turnip, 14/11; nenhuma testada no Odin ainda). Mesmo APK,
+   mesma posição na sala da árvore, "Logs de desempenho (60 s)" em cada caso, com as variáveis definidas em
+   Driver gráfico > Variáveis, que só valem com aquele driver:
+   - driver do sistema contra Turnip sem variáveis. Se a Qualcomm tiver o mesmo custo, o problema está no
+     conteúdo do shader; se só o Turnip for lento, acionar a campainha;
+   - Turnip com `IR3_SHADER_DEBUG=nouboopt`: se o passe HDR mudar muito, ganha peso a hipótese de laço com
+     limite lido de UBO;
+   - Turnip com `TU_DEBUG=sysmem` contra `TU_DEBUG=gmem`. O alvo tem ~11 MB, maior que a GMEM: ganhar com
+     sysmem indica custo de binning, ganhar com gmem indica custo de banda;
+   - `IR3_SHADER_DEBUG=nofp16` serve só de controle de precisão: anotar se a imagem mudar;
+   - `TU_DEBUG=perf` mostra no logcat por que GMEM ou LRZ foram desligados em cada passe.
+   Conferir também, na linha do tempo do relatório, se os degraus de ~250 ms coincidem com queda de clock
+   da GPU ou subida de temperatura. Se coincidirem, a causa é DCVS ou térmica, não o shader.
+4. Depois que o "Isolar o passe HDR" apontar o shader: tirar as estatísticas dele no driver
+   (`VK_KHR_pipeline_executable_properties`: waves, registradores, laços, spill e o assembly IR3, para ver se
+   há `ldc` dentro do laço). Isso exige ligar a extensão e a flag de captura no plume; fica para depois de
+   conhecido o shader, para não mexer no caminho de criação de todos os pipelines.
+5. Protocolo completo abaixo.
 
 ## 5. Protocolo de teste
 
