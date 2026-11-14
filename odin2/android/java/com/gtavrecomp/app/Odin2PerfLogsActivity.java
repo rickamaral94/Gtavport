@@ -137,6 +137,7 @@ public class Odin2PerfLogsActivity extends Activity {
                 if (uri == null) throw new IllegalStateException("MediaStore recusou o arquivo");
                 File ext = getExternalFilesDir(null);
                 File[] files = {new File(perfDir(), base + ".txt"), new File(perfDir(), base + ".csv"),
+                        new File(perfDir(), "logcat-" + base + ".txt"),
                         new File(ext, "logs/gtav.log"), new File(ext, "logs/driver_status.txt"), new File(ext, "gtav_settings.ini")};
                 try (OutputStream os = getContentResolver().openOutputStream(uri); ZipOutputStream z = new ZipOutputStream(os)) {
                     byte[] buf = new byte[1 << 16];

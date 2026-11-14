@@ -40,6 +40,8 @@ struct DeviceSample {
 DeviceSample LatestDevice();
 // Aparelho, driver e configurações numa linha (cabeçalho dos relatórios).
 std::string RunDescription();
+std::string SystemDescription();  // Android, kernel, gpu_model do KGSL
+std::string DriverDescription();  // pedido/efetivo (e o motivo), driverID, arquivo aberto: build-id e SHA-256
 
 // "Medir desempenho" (odin2_diag.cpp, ideia do diagnóstico do TOTK/BOTW).
 void DiagRequest(int seconds);           // menu do jogo

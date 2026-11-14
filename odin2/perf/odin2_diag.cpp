@@ -32,6 +32,8 @@
 #include <algorithm>
 #include <atomic>
 #include <cerrno>
+#include <cstdio>
+#include <cstring>
 #include <chrono>
 #include <csignal>
 #include <ctime>
@@ -113,6 +115,7 @@ std::unordered_map<uint64_t, uint64_t> g_census;
 std::atomic<uint64_t> g_census_frames{0};
 std::atomic<bool> g_census_on{false};
 std::vector<std::pair<uint64_t, uint64_t>> CensusSorted();  // (pixel shader, draws), do que mais desenha
+void SaveLogcat(const std::filesystem::path& out);  // logcat do processo, filtrado (driver e crashes)
 constexpr size_t kHdrCandidates = 24;  // 24 x 10 s + "como está" a cada 4: ~5 min dos 10
 std::vector<std::pair<int, double>> g_gpu_variant;  // (variante, GPU ms)
 // Linha do tempo (a cada 2 s) e os passes de GPU da janela de 300 quadros mais rápida e da mais lenta:
@@ -282,6 +285,8 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
     REXLOG_INFO("[diag] {}", s);
   };
   line("run: " + RunDescription() + " | medição " + std::to_string(g_seconds) + " s de jogo");
+  line("sistema: " + SystemDescription());
+  line("driver: " + DriverDescription());
 
   std::vector<double> iv, iv_on, iv_off, rec, idle, gw;
   double game_ms = 0;
@@ -490,9 +495,41 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
   std::ofstream(file) << text;
   std::ofstream(logs / "perf" / name) << text;
   REXLOG_INFO("[diag] relatório: {}", file.string());
+  SaveLogcat(logs / "perf" / ("logcat-" + name));
   if (g_from_file && !g_always) std::filesystem::remove(ExeDir() / "diag_request.txt", ec);
   std::lock_guard lock(g_mutex);
   g_last_report = file.string();
+}
+
+// logcat do próprio processo (o Android deixa um app ler os seus logs sem root), só as linhas do driver e do
+// carregamento: Turnip/Mesa/ir3 (TU_DEBUG=perf escreve aí), o loader Vulkan, o adrenotools e crashes nativos.
+// Vai para logs/perf/logcat-<relatório>.txt, que o "Exportar" da tela Logs de desempenho inclui no zip.
+void SaveLogcat(const std::filesystem::path& out) {
+#ifdef __ANDROID__
+  char cmd[96];
+  std::snprintf(cmd, sizeof cmd, "logcat -d -v threadtime --pid=%d 2>&1", int(getpid()));
+  FILE* p = popen(cmd, "r");
+  if (!p) return;
+  std::ofstream f(out);
+  f << "# logcat do processo do jogo (pid " << getpid() << "), filtrado: TU MESA ir3 freedreno vulkan adrenotools "
+       "Odin2Driver DEBUG libc\n";
+  static const char* const kKeys[] = {" TU",      "TU_",   "MESA",        "Mesa",   "ir3",  "freedreno", "turnip",
+                                      "vulkan",   "Vulkan", "adrenotools", "Odin2Driver", " DEBUG", " libc ", "kgsl"};
+  char line[2048];
+  size_t kept = 0;
+  while (std::fgets(line, sizeof line, p) && kept < 20000) {
+    for (const char* k : kKeys)
+      if (std::strstr(line, k)) {
+        f << line;
+        kept++;
+        break;
+      }
+  }
+  pclose(p);
+  REXLOG_INFO("[diag] logcat: {} linhas em {}", kept, out.string());
+#else
+  (void)out;
+#endif
 }
 
 // Thread da medição: espera o jogo, amostra /proc a cada 50 ms, o aparelho a cada 2 s e conduz o amostrador.
