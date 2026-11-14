@@ -118,9 +118,23 @@ Comparar três builds no mesmo aparelho: **upstream** (APK público do gtav-reco
 ### Drivers, isolados
 
 Mesmo APK, um driver por vez, cache de pipelines separado (limpar entre trocas): driver do sistema
-(Qualcomm), Turnip de referência do projeto e Turnip do Amaral Adreno Tools. Anotar o driver carregado (o
-relatório traz a linha `driver`). Só se um gargalo aparecer em um Turnip e não no driver do sistema vale
-abrir um pedido no Amaral Adreno Tools com cenário, versão, logs, comportamento esperado e o A/B.
+(Qualcomm), Turnip de referência do projeto e Turnip do Amaral Adreno Tools (v5.8.17.1, pacote Standard
+para o A740). Anotar o driver carregado (o relatório traz a linha `driver`).
+
+**Campainha do agente Turnip** (combinado com o Rick em 14/11: acionar sempre que algo precisar de ajuste
+ou análise no lado do driver, e discutir com ele o que ajustar). Ela fica na PR #2 deste repositório
+("turnip: campainha do agente Turnip", rascunho, não mesclar); detalhes em `docs/campainha-turnip.md` no
+branch `turnip/campainha`. O comentário começa com `[gtav]` e traz:
+- sintoma e rótulo (validado no Odin / verificado localmente / pendente de hardware);
+- build do Gtavport e driver (`driverName` e `driverInfo` do relatório);
+- o A/B contra o driver do sistema, no mesmo APK e com cache separado;
+- onde estão os relatórios;
+- o comportamento esperado.
+
+Quando acionar: crash, device lost ou corrupção que só acontecem no Turnip; um passe mais lento só no
+Turnip; dúvida sobre variável de ambiente ou recurso do driver; pedido de driver de laboratório. Antes de
+relatar corrupção só no Turnip, repetir com `TU_DEBUG=flushall` e com `TU_DEBUG=syncdraw` (mesa#15792:
+corrupção por desenho no A725/A750 que some com esses flags).
 
 ### Rótulos dos resultados
 
