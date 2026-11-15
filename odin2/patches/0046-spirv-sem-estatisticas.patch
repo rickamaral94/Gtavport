@@ -1,0 +1,26 @@
+--- a/gtav/src/native/backend.cpp
++++ b/gtav/src/native/backend.cpp
+@@ -1622,6 +1622,7 @@
+   // GTAVPORT_PIPELINE_STATS=1 (Driver gráfico > Variáveis): statistics and IR of each (vs, ps) pipeline that
+   // draws into the full-size HDR target, once, into logs/perf/pipeline-stats.txt (for the Turnip agent).
+   std::unordered_set<uint64_t> stats_dumped;
++  std::unordered_set<uint64_t> spirv_dumped;  // GTAVPORT_PIPELINE_SPIRV sem GTAVPORT_PIPELINE_STATS
+   std::unordered_map<uint64_t, std::string> pipeline_desc_text;  // pipeline key -> state (only with the variable)
+   static bool PipelineStatsOn() {
+     static const bool on = [] {
+@@ -4825,6 +4826,15 @@
+     if (PipelineStatsOn() && bound_depth && bound_color[0] && !bound_color[1] &&
+         bound_color[0]->format == RenderFormat::R16G16B16A16_FLOAT && bound_color[0]->width >= 640)
+       DumpPipelineStats(d.vs_hash, d.ps_hash, pipeline, pkey);
++    // GTAVPORT_PIPELINE_SPIRV sozinha também grava o SPIR-V do pipeline pedido (uma vez por par vs/ps).
++    static const bool spirv_only = std::getenv("GTAVPORT_PIPELINE_SPIRV") && !PipelineStatsOn();
++    if (spirv_only && bound_depth && bound_color[0] && !bound_color[1] &&
++        bound_color[0]->format == RenderFormat::R16G16B16A16_FLOAT && bound_color[0]->width >= 640 &&
++        spirv_dumped.insert(d.vs_hash * 31 ^ d.ps_hash).second) {
++      std::error_code ec;
++      std::filesystem::create_directories(ExeDir() / "logs" / "perf", ec);
++      DumpSpirv(d.vs_hash, d.ps_hash);
++    }
+     // --gtav_native_light_coarse: coarser shading for this draw only; the pass's own rate comes back
+     // right after it (the state outlives the draw: blits and post-processing would inherit it).
+     struct RateRestore {

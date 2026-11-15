@@ -44,3 +44,4 @@ gtav        0042-retraduz-shaders-antigos.patch
 plume       0043-estatisticas-modo-stats-e-logs.patch
 gtav        0044-estatisticas-modo-stats-no-backend.patch
 plume       0045-estatisticas-sem-consulta-de-contagem.patch
+gtav        0046-spirv-sem-estatisticas.patch
