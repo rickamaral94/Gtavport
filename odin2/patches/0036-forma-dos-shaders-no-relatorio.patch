@@ -1,0 +1,48 @@
+--- a/gtav/src/native/shader_compiler.h
++++ b/gtav/src/native/shader_compiler.h
+@@ -42,6 +42,9 @@
+   std::vector<std::string> missing_at_draw;   // drawn this run without SPIR-V
+ };
+ ShaderStats GetShaderStats();
++// Gtavport: shape of a shader's translated HLSL in the shader cache ("ps_<hash>"): size, loops and
++// whether XenosRecomp emitted the pc-dispatch state machine (while (true) / switch (pc)).
++std::string ShaderSourceInfo(const std::string& name);
+ // Renderer: a draw needed this shader and had no SPIR-V.
+ void NoteMissingAtDraw(const std::string& name);
+ 
+--- a/gtav/src/native/shader_compiler.cpp
++++ b/gtav/src/native/shader_compiler.cpp
+@@ -250,6 +250,22 @@
+   return ok;
+ }
+ 
++std::string ShaderSourceInfo(const std::string& name) {
++  std::ifstream in(CacheDir() / (name + ".hlsl"));
++  if (!in) return "sem HLSL no cache (traduzido na instalação ou ainda não traduzido)";
++  size_t lines = 0, loops = 0, cases = 0;
++  bool dispatch = false;
++  std::string line;
++  while (std::getline(in, line)) {
++    lines++;
++    if (line.find("switch (pc)") != std::string::npos) dispatch = true;
++    if (line.find("for (aL = 0;") != std::string::npos || line.find("++aL;") != std::string::npos) loops++;
++    if (line.find("case ") != std::string::npos && line.find(':') != std::string::npos) cases++;
++  }
++  return fmt::format("HLSL {} linhas | {} | laços {} | cases {}", lines,
++                     dispatch ? "fluxo em máquina de estados (while/switch(pc))" : "fluxo estruturado", loops, cases);
++}
++
+ bool Compile(const std::string& name) {
+   const fs::path tools = ToolsDir(), cache = CacheDir();
+   const bool pixel = name.rfind("ps_", 0) == 0;
+--- a/gtav/src/native/backend.cpp
++++ b/gtav/src/native/backend.cpp
+@@ -1629,6 +1629,8 @@
+     std::filesystem::create_directories(ExeDir() / "logs" / "perf", ec);
+     std::ofstream f(ExeDir() / "logs" / "perf" / "pipeline-stats.txt", stats_dumped.size() == 1 ? std::ios::trunc : std::ios::app);
+     f << fmt::format("=== pipeline do passe HDR #{}: vs {:016X} ps {:016X}\n", stats_dumped.size(), vs_hash, ps_hash)
++      << "  fonte vs: " << ShaderSourceInfo(fmt::format("vs_{:016X}", vs_hash)) << "\n"
++      << "  fonte ps: " << (ps_hash ? ShaderSourceInfo(fmt::format("ps_{:016X}", ps_hash)) : std::string("sem pixel shader")) << "\n"
+       << (report.empty() ? std::string("  (sem estatísticas: driver sem VK_KHR_pipeline_executable_properties ou "
+                                        "pipeline criado antes do pedido)\n")
+                          : report)

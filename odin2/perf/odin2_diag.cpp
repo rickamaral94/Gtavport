@@ -25,6 +25,7 @@
 #include "odin2_procstat.h"
 
 #include "paths.h"
+#include "shader_compiler.h"
 
 #include <rex/cvar.h>
 #include <rex/logging.h>
@@ -397,9 +398,12 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
                   "entraram no rodízio)", census.size(), frames, kHdrCandidates);
     line(b);
     for (size_t i = 0; i < census.size() && i < 64; i++) {
-      std::snprintf(b, sizeof b, "  %016llX  %8.2f", static_cast<unsigned long long>(census[i].first),
+      char hx[24];
+      std::snprintf(hx, sizeof hx, "ps_%016llX", static_cast<unsigned long long>(census[i].first));
+      std::snprintf(b, sizeof b, "  %016llX  %8.2f  ", static_cast<unsigned long long>(census[i].first),
                     double(census[i].second) / frames);
-      line(b);
+      // Forma da tradução (XenosRecomp): a máquina de estados while/switch(pc) pesou no Turnip (EFEADDD8...).
+      line(b + (census[i].first ? ShaderSourceInfo(hx) : std::string("sem pixel shader")));
     }
   }
 
