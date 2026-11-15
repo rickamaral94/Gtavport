@@ -1,0 +1,39 @@
+--- a/gtav/src/native/menu.cpp
++++ b/gtav/src/native/menu.cpp
+@@ -182,23 +182,27 @@
+   combo("Anisotropic filtering", "gtav_native_max_anisotropy", kAnisoValues, kAnisoNames, 5,
+         "Cap on the texture filtering the game asks for (sharper ground and roads at an angle).\n"
+         "Lower it if the GPU is the bottleneck.");
+-  static const char* const kScaleValues[] = {"0.5", "0.6", "0.67", "0.75", "0.85", "1"};
+-  static const char* const kScaleNames[] = {"50%", "60%", "67%", "75%", "85%", "100% (native 720p)"};
++  // Gtavport: 150% = 1920x1080, a tela do Odin 2 (sem upscaler: o pós-processamento só amplia quando a imagem é menor).
++  static const char* const kScaleValues[] = {"0.5", "0.6", "0.67", "0.75", "0.85", "1", "1.5"};
++  static const char* const kScaleNames[] = {"50%", "60%", "67%", "75%", "85%", "100% (native 720p)", "150% (1080p)"};
++  constexpr int kScaleCount = int(sizeof(kScaleValues) / sizeof(kScaleValues[0]));
+   std::string scale = rex::cvar::GetFlagByName("gtav_native_render_scale");
+   int choice = -1;
+-  for (int i = 0; i < 6; i++)
++  for (int i = 0; i < kScaleCount; i++)
+     if (std::abs(std::atof(scale.c_str()) - std::atof(kScaleValues[i])) < 0.005) choice = i;
+-  const char* custom[7];
+-  for (int i = 0; i < 6; i++) custom[i] = kScaleNames[i];
+-  custom[6] = "Custom (command line)";
+-  if (choice < 0) choice = 6;
++  const char* custom[kScaleCount + 1];
++  for (int i = 0; i < kScaleCount; i++) custom[i] = kScaleNames[i];
++  custom[kScaleCount] = "Custom (command line)";
++  if (choice < 0) choice = kScaleCount;
+   ImGui::SetNextItemWidth(260.0f * g_scale);
+-  if (ImGui::Combo("Internal resolution", &choice, custom, choice == 6 ? 7 : 6) && choice < 6) {
++  if (ImGui::Combo("Internal resolution", &choice, custom, choice == kScaleCount ? kScaleCount + 1 : kScaleCount) &&
++      choice < kScaleCount) {
+     rex::cvar::SetFlagByName("gtav_native_render_scale", kScaleValues[choice]);
+     changed = true;
+   }
+   if (ImGui::IsItemHovered())
+-    ImGui::SetTooltip("Share of 1280x720 the 3D scene is drawn at. Lower: faster, softer (pair it with an upscaler).\n"
++    ImGui::SetTooltip("Size the 3D scene is drawn at, relative to 1280x720. Lower: faster, softer (pair it with an upscaler).\n"
++                      "150%: 1920x1080, the Odin 2 screen (about 2.25x the GPU work of 100%).\n"
+                       "Applies the next time the game starts.");
+   ImGui::TextDisabled("Internal resolution applies on the next start; the others right away.");
+ }

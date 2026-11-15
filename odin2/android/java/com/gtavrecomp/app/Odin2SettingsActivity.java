@@ -105,9 +105,10 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
         Tab v = new Tab("Vídeo");
         tabs.add(v);
         opt(v, "gtav_native_render_scale", "Resolução interna",
-                "Parte de 1280x720 em que a cena 3D é desenhada. Menor = mais rápido e mais suave (use junto com um upscaler).",
-                new String[] {"0.5", "0.6", "0.67", "0.75", "0.85", "1"},
-                new String[] {"50%", "60%", "67%", "75%", "85%", "100% (720p nativo)"});
+                "Tamanho em que a cena 3D é desenhada, em relação a 1280x720. Menor = mais rápido e mais suave (use junto com um "
+                        + "upscaler). 150% = 1920x1080, a tela do Odin 2: imagem mais nítida, cerca de 2,25x o trabalho da GPU de 100%.",
+                new String[] {"0.5", "0.6", "0.67", "0.75", "0.85", "1", "1.5"},
+                new String[] {"50%", "60%", "67%", "75%", "85%", "100% (720p nativo)", "150% (1080p)"});
         opt(v, "odin2_upscaler", "Upscaler",
                 "Como a imagem chega ao tamanho da tela. Snapdragon GSR 1: uma passada, feito para Adreno (detecta a direção das bordas). "
                         + "AMD FSR 1: duas passadas, um pouco mais nítido e mais caro.",
