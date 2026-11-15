@@ -1,0 +1,77 @@
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -1722,7 +1722,13 @@
+         pipelineInfo.layout = pipelineLayout->vk;
+         pipelineInfo.renderPass = renderPass;
+         if (device->pipelineStatsEnabled) {
+-            pipelineInfo.flags |= VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR | VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR;
++            pipelineInfo.flags |= VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR;
++            if (device->pipelineStatsIR) pipelineInfo.flags |= VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR;
++            static std::atomic<uint32_t> logged{0};
++            if (logged.fetch_add(1) < 3) {
++                fprintf(stderr, "[gtavport] pipeline stats: create with flags 0x%X\n", unsigned(pipelineInfo.flags));
++                fflush(stderr);
++            }
+         }
+ 
+         // Gtavport: with GTAVPORT_PIPELINE_STATS=1 no VkPipelineCache, or the driver returns cached binaries
+@@ -4237,7 +4243,10 @@
+         // (pipelines are then created with the capture flags; diagnostic, costs pipeline cache hits).
+         VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR executableFeatures = {};
+         const char *statsEnv = getenv("GTAVPORT_PIPELINE_STATS");
+-        const bool executableFound = statsEnv != nullptr && statsEnv[0] == '1' &&
++        // "1": statistics and internal representations; "stats": statistics only (no IR capture flag,
++        // no vkGetPipelineExecutableInternalRepresentationsKHR), to isolate drivers that fail on the IR.
++        const bool statsOnly = statsEnv != nullptr && strcmp(statsEnv, "stats") == 0;
++        const bool executableFound = statsEnv != nullptr && (statsEnv[0] == '1' || statsOnly) &&
+             supportedOptionalExtensions.find(VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME) != supportedOptionalExtensions.end();
+         if (executableFound) {
+             executableFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR;
+@@ -4336,6 +4345,13 @@
+         // Only the per-draw (pipeline/dynamic) rate is used: coarse shading for chosen passes.
+         fragmentShadingRateSupported = shadingRateFound && shadingRateFeatures.pipelineFragmentShadingRate;
+         pipelineStatsEnabled = executableFound && executableFeatures.pipelineExecutableInfo;
++        pipelineStatsIR = pipelineStatsEnabled && !statsOnly;
++        if (statsEnv != nullptr) {
++            fprintf(stderr, "[gtavport] pipeline stats: GTAVPORT_PIPELINE_STATS=%s, extension %s, feature pipelineExecutableInfo %s -> %s\n",
++                statsEnv, executableFound ? "found" : "missing", executableFeatures.pipelineExecutableInfo ? "1" : "0",
++                pipelineStatsEnabled ? (pipelineStatsIR ? "statistics + IR" : "statistics only") : "off");
++            fflush(stderr);
++        }
+         if (fragmentShadingRateSupported) {
+             shadingRateFeatures.primitiveFragmentShadingRate = VK_FALSE;
+             shadingRateFeatures.attachmentFragmentShadingRate = VK_FALSE;
+@@ -5119,6 +5135,8 @@
+             VkPipelineExecutableInfoKHR einfo = { VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_INFO_KHR };
+             einfo.pipeline = gp->vk;
+             einfo.executableIndex = i;
++            fprintf(stderr, "[gtavport] pipeline stats: get stats exe %u\n", i);
++            fflush(stderr);
+             uint32_t ns = 0;
+             if (vkGetPipelineExecutableStatisticsKHR != nullptr && vkGetPipelineExecutableStatisticsKHR(dev->vk, &einfo, &ns, nullptr) == VK_SUCCESS && ns > 0) {
+                 std::vector<VkPipelineExecutableStatisticKHR> stats(ns, { VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_STATISTIC_KHR });
+@@ -5136,7 +5154,11 @@
+                 out += "\n";
+             }
+             uint32_t nr = 0;
+-            if (withIR && vkGetPipelineExecutableInternalRepresentationsKHR != nullptr &&
++            if (withIR && dev->pipelineStatsIR) {
++                fprintf(stderr, "[gtavport] pipeline stats: get IR exe %u\n", i);
++                fflush(stderr);
++            }
++            if (withIR && dev->pipelineStatsIR && vkGetPipelineExecutableInternalRepresentationsKHR != nullptr &&
+                 vkGetPipelineExecutableInternalRepresentationsKHR(dev->vk, &einfo, &nr, nullptr) == VK_SUCCESS && nr > 0) {
+                 std::vector<VkPipelineExecutableInternalRepresentationKHR> reps(nr, { VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_INTERNAL_REPRESENTATION_KHR });
+                 vkGetPipelineExecutableInternalRepresentationsKHR(dev->vk, &einfo, &nr, reps.data());
+--- a/plume_vulkan.h
++++ b/plume_vulkan.h
+@@ -438,7 +438,8 @@
+         std::unique_ptr<RenderBuffer> nullBuffer;
+         bool loadStoreOpNoneSupported = false;
+         bool fragmentShadingRateSupported = false;
+-        bool pipelineStatsEnabled = false;  // Gtavport: GTAVPORT_PIPELINE_STATS=1 and the driver supports it
++        bool pipelineStatsEnabled = false;
++        bool pipelineStatsIR = false;  // Gtavport: GTAVPORT_PIPELINE_STATS=1 (not "stats"): also the IR  // Gtavport: GTAVPORT_PIPELINE_STATS=1 and the driver supports it
+         bool nullDescriptorSupported = false;
+ 
+         VulkanDevice(VulkanInterface *renderInterface, const std::string &preferredDeviceName);

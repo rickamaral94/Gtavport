@@ -41,3 +41,5 @@ gtav        0039-shadersourceinfo-publico.patch
 plume       0040-estatisticas-sem-pipeline-cache.patch
 XenosRecomp 0041-tradutor-sem-maquina-de-estados.patch
 gtav        0042-retraduz-shaders-antigos.patch
+plume       0043-estatisticas-modo-stats-e-logs.patch
+gtav        0044-estatisticas-modo-stats-no-backend.patch
