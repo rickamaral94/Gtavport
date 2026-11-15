@@ -1,20 +1,16 @@
 > [!WARNING]
-> **Pré-release de teste (diagnóstico do Turnip).** Corrige a v0.3.0-pre3, que não abria o jogo
-> ("cannot locate symbol ...ShaderSourceInfo"). Em relação à v0.3.0-pre2:
-> - A causa das travadas no Turnip foi achada: um único shader do passe da cena (`EFEADDD82B576B06`), que no
->   compilador do Turnip fica sem registradores. Com o driver do sistema (Qualcomm) não trava: use-o para jogar.
-> - Coleta para o driver, ligada por variáveis em **Driver gráfico > Variáveis**. A linha "Driver do sistema" agora
->   também tem esse botão.
->   - `GTAVPORT_PIPELINE_STATS=1`: estatísticas, código compilado e estado de cada pipeline do passe da cena,
->     além de como cada shader foi traduzido.
->   - `GTAVPORT_PIPELINE_SPIRV=<hash>`: o shader traduzido desse pipeline.
+> **Pré-release de teste: correção das travadas no Turnip.** Em relação à v0.3.0-pre4:
+> - O tradutor de shaders (XenosRecomp) deixa de gerar a "máquina de estados" quando o shader só tem saltos para
+>   frente. Era isso que, no Turnip, esgotava os registradores no shader `EFEADDD82B576B06` e causava quadros de
+>   ~250 ms. Na primeira abertura, os shaders afetados são traduzidos de novo (aviso rápido de shaders sendo
+>   preparados), sem recompilar o jogo. Para voltar ao formato antigo, use a variável `XENOSRECOMP_PC_LOOP=1`.
+> - **Diagnóstico.** Mudanças na coleta para o driver:
+>   - a coleta de estatísticas cria os pipelines sem o cache, para vir o código compilado completo;
+>   - `GTAVPORT_PIPELINE_STATS=stats` coleta só os números;
+>   - cada etapa fica registrada no `stderr.txt`;
+>   - ao voltar do jogo, o menu salva o logcat do app em `logs/perf/last-session-logcat.txt` (entra no Exportar).
 >
->   Tudo vai para `logs/perf` e entra no zip do "Exportar". Esses arquivos são derivados do seu jogo:
->   compartilhe só com quem estiver analisando. O desempenho de uma rodada com essas variáveis não serve como
->   medida.
-> - O relatório passa a mostrar também as variáveis `GTAV_*` e `GTAVPORT_*`.
->
-> Instala por cima da versão anterior sem perder saves.
+> Ainda não testada no Odin: compare a imagem com a do driver do sistema. Instala por cima sem perder saves.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.
