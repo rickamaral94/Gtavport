@@ -79,9 +79,35 @@ public class Odin2MenuActivity extends Odin2GtaActivity {
         }
     }
 
+    /**
+     * Logcat do app (todos os processos do mesmo UID, inclusive o do jogo) ao voltar ao menu: uma queda nativa
+     * do jogo (sinal, driver Vulkan) deixa as últimas linhas aqui, em logs/perf/last-session-logcat.txt, que o
+     * Exportar da tela Logs de desempenho inclui. Sem root: o Android deixa o app ler os próprios logs.
+     */
+    private void saveLastSessionLogcat() {
+        new Thread(() -> {
+            try {
+                java.io.File dir = new java.io.File(getExternalFilesDir(null), "logs/perf");
+                dir.mkdirs();
+                Process p = new ProcessBuilder("logcat", "-d", "-v", "threadtime", "-t", "6000")
+                        .redirectErrorStream(true).start();
+                try (java.io.InputStream in = p.getInputStream();
+                     java.io.OutputStream out = new java.io.FileOutputStream(new java.io.File(dir, "last-session-logcat.txt"))) {
+                    byte[] buf = new byte[1 << 16];
+                    int n;
+                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                }
+                p.waitFor();
+            } catch (Exception e) {
+                android.util.Log.w("Odin2Menu", "logcat da última sessão: " + e);
+            }
+        }, "last-session-logcat").start();
+    }
+
     @Override
     protected void onRestart() {
         super.onRestart();
+        saveLastSessionLogcat();  // o jogo (processo :game) acabou de sair: normal ou queda
         rebuild();  // o pedido "no próximo jogo" some depois do relatório
     }
 
