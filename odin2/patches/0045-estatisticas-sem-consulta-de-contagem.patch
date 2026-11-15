@@ -1,0 +1,21 @@
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -5137,10 +5137,14 @@
+             einfo.executableIndex = i;
+             fprintf(stderr, "[gtavport] pipeline stats: get stats exe %u\n", i);
+             fflush(stderr);
+-            uint32_t ns = 0;
+-            if (vkGetPipelineExecutableStatisticsKHR != nullptr && vkGetPipelineExecutableStatisticsKHR(dev->vk, &einfo, &ns, nullptr) == VK_SUCCESS && ns > 0) {
+-                std::vector<VkPipelineExecutableStatisticKHR> stats(ns, { VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_STATISTIC_KHR });
+-                vkGetPipelineExecutableStatisticsKHR(dev->vk, &einfo, &ns, stats.data());
++            // One call with a preallocated array (VK_INCOMPLETE if the driver has more): the Qualcomm driver
++            // (0676.53, compiler E031.41.03.47) segfaulted on the count query with pStatistics = NULL.
++            uint32_t ns = 64;
++            std::vector<VkPipelineExecutableStatisticKHR> stats(ns, { VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_STATISTIC_KHR });
++            const VkResult sres = vkGetPipelineExecutableStatisticsKHR != nullptr
++                ? vkGetPipelineExecutableStatisticsKHR(dev->vk, &einfo, &ns, stats.data()) : VK_ERROR_FEATURE_NOT_PRESENT;
++            if ((sres == VK_SUCCESS || sres == VK_INCOMPLETE) && ns > 0) {
++                stats.resize(ns);
+                 out += "    stats:";
+                 for (const VkPipelineExecutableStatisticKHR &s : stats) {
+                     switch (s.format) {
