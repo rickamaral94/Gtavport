@@ -1,13 +1,19 @@
 > [!WARNING]
-> **Pré-release de teste.** Em relação à v0.3.0-pre1:
-> - O app se identifica ao driver Vulkan como **Gtavport** (motor gtav-recomp), e não mais como "plume".
-> - Novo diagnóstico para o driver: com `GTAVPORT_PIPELINE_STATS=1` em **Driver gráfico > Variáveis** (Turnip),
->   o jogo grava em `logs/perf/pipeline-stats.txt` as estatísticas e o código compilado dos shaders do passe da
->   cena. O "Exportar" da tela Logs de desempenho inclui o arquivo. O desempenho de uma rodada com essa variável não
->   serve como medida, e o arquivo é derivado do seu jogo: compartilhe só com quem estiver analisando.
+> **Pré-release de teste (diagnóstico do Turnip).** Em relação à v0.3.0-pre2:
+> - A causa das travadas no Turnip foi achada: um único shader do passe da cena (`EFEADDD82B576B06`), que no
+>   compilador do Turnip fica sem registradores. Com o driver do sistema (Qualcomm) não trava: use-o para jogar.
+> - Coleta para o driver, ligada por variáveis em **Driver gráfico > Variáveis**. A linha "Driver do sistema" agora
+>   também tem esse botão.
+>   - `GTAVPORT_PIPELINE_STATS=1`: estatísticas, código compilado e estado de cada pipeline do passe da cena,
+>     além de como cada shader foi traduzido.
+>   - `GTAVPORT_PIPELINE_SPIRV=<hash>`: o shader traduzido desse pipeline.
 >
-> Para jogar, o driver do sistema (Qualcomm) está em 60 fps na sala da árvore; o Turnip tem travadas no passe da
-> cena, ainda em investigação. Instala por cima da versão anterior sem perder saves.
+>   Tudo vai para `logs/perf` e entra no zip do "Exportar". Esses arquivos são derivados do seu jogo:
+>   compartilhe só com quem estiver analisando. O desempenho de uma rodada com essas variáveis não serve como
+>   medida.
+> - O relatório passa a mostrar também as variáveis `GTAV_*` e `GTAVPORT_*`.
+>
+> Instala por cima da versão anterior sem perder saves.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.
