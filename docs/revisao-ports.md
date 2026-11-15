@@ -124,7 +124,7 @@ Resultado na v0.3.0-pre5, Turnip lab 5.9.18.1, sala da árvore, 60 s em cada uma
 | Quadros > 100 ms em 60 s | 116–171 | **0** | 0 |
 | Passe HDR (janela lenta) | 72–111 ms | **2,8–3,1 ms** | 2,8 ms |
 
-A conferir: se a imagem ficou igual à do driver do sistema, e as estatísticas do ir3 do shader novo.
+Imagem conferida pelo Rick no Odin: igual à do driver do sistema. Falta só medir as estatísticas do ir3 do shader novo.
 
 ## 4. O que ainda precisa ser medido (no Odin 2)
 
