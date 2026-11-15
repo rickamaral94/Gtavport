@@ -1,0 +1,14 @@
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -5095,7 +5095,10 @@
+     std::string GetVulkanPipelineReport(RenderDevice *device, const RenderPipeline *pipeline, bool withIR) {
+         auto *dev = static_cast<VulkanDevice *>(device);
+         auto *gp = static_cast<const VulkanGraphicsPipeline *>(pipeline);
+-        if (dev == nullptr || gp == nullptr || !dev->pipelineStatsEnabled || gp->vk == VK_NULL_HANDLE || vkGetPipelineExecutablePropertiesKHR == nullptr) {
++        if (dev != nullptr && !dev->pipelineStatsEnabled) {
++            return "  VK_KHR_pipeline_executable_properties: não suportado por este driver (extensão ou feature pipelineExecutableInfo ausente)\n";
++        }
++        if (dev == nullptr || gp == nullptr || gp->vk == VK_NULL_HANDLE || vkGetPipelineExecutablePropertiesKHR == nullptr) {
+             return {};
+         }
+         VkPipelineInfoKHR info = { VK_STRUCTURE_TYPE_PIPELINE_INFO_KHR };

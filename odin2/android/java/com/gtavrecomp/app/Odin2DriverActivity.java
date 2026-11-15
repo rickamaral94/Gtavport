@@ -134,6 +134,10 @@ public class Odin2DriverActivity extends Activity {
             refresh();
         });
         r.addView(rb);
+        if (info == null) {
+            String env = Odin2Driver.driverEnv(this, id);
+            if (!env.isEmpty()) r.addView(text("variáveis: " + env.replace('\n', ' '), 12, Color.GRAY));
+        }
         if (info != null) {
             StringBuilder d = new StringBuilder();
             if (!info.vendor.isEmpty()) d.append(info.vendor).append(" · ");
@@ -148,8 +152,9 @@ public class Odin2DriverActivity extends Activity {
         btns.setOrientation(LinearLayout.HORIZONTAL);
         btns.setGravity(Gravity.START);
         btns.addView(button("Testar", v -> test(id)));
+        // Também no driver do sistema: GTAVPORT_* (estatísticas de pipeline, diagnósticos do jogo).
+        btns.addView(button("Variáveis", v -> editEnv(id, info == null ? "Driver do sistema" : info.title())));
         if (info != null) {
-            btns.addView(button("Variáveis", v -> editEnv(info)));
             btns.addView(button("Remover", v -> confirmRemove(info)));
         }
         r.addView(btns);
@@ -176,17 +181,17 @@ public class Odin2DriverActivity extends Activity {
 
     private String pendingTest;
 
-    private void editEnv(Odin2Driver.Info info) {
+    private void editEnv(String id, String title) {
         EditText e = new EditText(this);
-        e.setText(Odin2Driver.driverEnv(this, info.id));
+        e.setText(Odin2Driver.driverEnv(this, id));
         e.setHint("NOME=VALOR, uma por linha (ex.: TU_DEBUG=sysmem)");
         e.setMinLines(3);
-        new AlertDialog.Builder(this).setTitle("Variáveis de " + info.title())
+        new AlertDialog.Builder(this).setTitle("Variáveis de " + title)
                 .setMessage("Aplicadas só com este driver escolhido. Ex. Turnip: TU_DEBUG=sysmem ou TU_DEBUG=gmem "
                         + "para comparar modos de renderização. Meça antes e depois (docs/baseline.md).")
                 .setView(e)
                 .setPositiveButton("Salvar", (d, w) -> {
-                    Odin2Driver.setDriverEnv(this, info.id, e.getText().toString());
+                    Odin2Driver.setDriverEnv(this, id, e.getText().toString());
                     refresh();
                 })
                 .setNegativeButton("Cancelar", null).show();

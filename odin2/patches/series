@@ -36,3 +36,4 @@ plume       0034-estatisticas-dos-pipelines-plume.patch
 gtav        0035-estatisticas-dos-pipelines-hdr.patch
 gtav        0036-forma-dos-shaders-no-relatorio.patch
 gtav        0037-spirv-e-estado-do-pipeline.patch
+plume       0038-estatisticas-nao-suportadas.patch
