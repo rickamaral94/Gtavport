@@ -1,0 +1,49 @@
+--- a/gtav/src/native/shader_compiler.cpp
++++ b/gtav/src/native/shader_compiler.cpp
+@@ -424,7 +424,46 @@
+   return g_present.count(name) != 0;
+ }
+ 
++// Gtavport: XenosRecomp now emits forward-only jumps as guarded blocks instead of the while/switch(pc)
++// state machine (xenosrecomp patch 0041). Shaders translated before keep the old form in the cache: once
++// per translator version, the ones whose cached HLSL has the state machine lose their .spv (and variants)
++// so the next draw translates them again.
++// XENOSRECOMP_PC_LOOP=1 (Driver gráfico > Variáveis) goes back to the state machine: the same switch, the
++// other way round (the forward form's "if (pc <= " marks the shaders to translate again).
++void InvalidateOldTranslations() {
++  const char* loop = std::getenv("XENOSRECOMP_PC_LOOP");
++  const bool keep_loop = loop && loop[0] == '1';
++  const char* const kTranslatorVersion = keep_loop ? "gtavport-pc-loop" : "gtavport-forward-pc-1";
++  const char* const stale = keep_loop ? "if (pc <= " : "switch (pc)";
++  std::error_code ec;
++  const fs::path marker = CacheDir() / "translator.version";
++  {
++    std::ifstream in(marker);
++    std::string v;
++    if (in && std::getline(in, v) && v == kTranslatorVersion) return;
++  }
++  size_t removed = 0;
++  if (fs::exists(CacheDir(), ec)) {
++    for (const auto& e : fs::directory_iterator(CacheDir(), ec)) {
++      if (e.path().extension() != ".hlsl") continue;
++      std::ifstream in(e.path());
++      std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
++      if (text.find(stale) == std::string::npos) continue;
++      const std::string name = e.path().stem().string();  // ps_<hash> or a variant ps_<hash><suffix>
++      for (const auto& f : fs::directory_iterator(SpirvDirPath(), ec))
++        if (f.path().extension() == ".spv" && f.path().stem().string().rfind(name, 0) == 0) fs::remove(f.path(), ec);
++      fs::remove(e.path(), ec);
++      removed++;
++    }
++  }
++  fs::create_directories(CacheDir(), ec);
++  std::ofstream(marker) << kTranslatorVersion << '\n';
++  REXLOG_INFO("[native] shader translator {}: {} shaders in the other control-flow form will be translated again",
++              kTranslatorVersion, removed);
++}
++
+ static void IntakeWorker() {
++  InvalidateOldTranslations();
+   for (;;) {
+     Intake item;
+     {

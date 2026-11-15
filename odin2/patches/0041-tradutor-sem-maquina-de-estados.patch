@@ -1,0 +1,131 @@
+--- a/XenosRecomp/shader_recompiler.cpp
++++ b/XenosRecomp/shader_recompiler.cpp
+@@ -1664,6 +1664,12 @@
+     uint32_t instrAddress = 0;
+     uint32_t instrSize = shader->size;
+     bool simpleControlFlow = true;
++    // Gtavport: jumps that only go forward (and no loops) are emitted as guarded blocks in order
++    // ("if (pc <= k)") instead of the while/switch(pc) state machine. Same semantics, but no loop: in
++    // the state machine every value that crosses a case is a loop phi, and on the Adreno (Turnip/ir3)
++    // GTA's EFEADDD82B576B06 hit the register ceiling and spilled on every iteration (~250 ms frames).
++    bool forwardOnly = true;
++    uint32_t scanIndex = 0;
+ 
+     while (instrAddress < instrSize)
+     {
+@@ -1701,10 +1707,18 @@
+                     simpleControlFlow = false;
+                 else
+                     ++ifEndLabels[cfInstr.condJmp.address];
++                if (uint32_t(cfInstr.condJmp.address) <= scanIndex)
++                    forwardOnly = false;
+ 
+                 break;
+             }
++
++            case ControlFlowOpcode::LoopStart:
++            case ControlFlowOpcode::LoopEnd:
++                forwardOnly = false;
++                break;
+             }
++            ++scanIndex;
+ 
+             if (address != 0)
+                 instrSize = std::min<uint32_t>(instrSize, address * 12);
+@@ -1714,11 +1728,23 @@
+         instrAddress += 12;
+     }
+ 
++    {
++        const char* keepLoop = getenv("XENOSRECOMP_PC_LOOP");  // "1": the original state machine
++        if (simpleControlFlow || (keepLoop && keepLoop[0] == '1'))
++            forwardOnly = false;
++    }
++
+     if (simpleControlFlow)
+     {
+         out += '\n';
+         indentation = 1;
+     }
++    else if (forwardOnly)
++    {
++        // pc: the control-flow index execution has reached; a forward jump moves it ahead and the
++        // blocks in between are skipped; the end of the shader moves it past every block.
++        out += "\n\tuint pc = 0;\n";
++    }
+     else
+     {
+         out += "\n\tuint pc = 0;\n";
+@@ -1741,7 +1767,13 @@
+ 
+         for (auto& cfInstr : controlFlow)
+         {
+-            if (!simpleControlFlow)
++            if (forwardOnly)
++            {
++                indentation = 2;
++                println("\tif (pc <= {})", pc);
++                out += "\t{\n";
++            }
++            else if (!simpleControlFlow)
+             {
+                 indentation = 3;
+                 println("\t\tcase {}:", pc);
+@@ -1865,8 +1897,15 @@
+                 if (cfInstr.condJmp.isUnconditional)
+                 {
+                     assert(!simpleControlFlow);
+-                    println("\t\t\tpc = {};", uint32_t(cfInstr.condJmp.address));
+-                    out += "\t\t\tcontinue;\n";
++                    if (forwardOnly)
++                    {
++                        println("\t\tpc = {};", uint32_t(cfInstr.condJmp.address));
++                    }
++                    else
++                    {
++                        println("\t\t\tpc = {};", uint32_t(cfInstr.condJmp.address));
++                        out += "\t\t\tcontinue;\n";
++                    }
+                 }
+                 else
+                 {
+@@ -1890,6 +1929,10 @@
+                         out += "{\n";
+                         ++indentation;
+                     }
++                    else if (forwardOnly)
++                    {
++                        println("\t\t\tpc = {};", uint32_t(cfInstr.condJmp.address));
++                    }
+                     else
+                     {
+                         out += "\t\t\t{\n";
+@@ -2078,6 +2121,10 @@
+                         out += "return;\n";
+                     }
+                 }
++                else if (forwardOnly)
++                {
++                    out += "\t\tpc = 0xFFFFFFFFu;\n";  // end of the shader: skip every later block
++                }
+                 else
+                 {
+                     out += "\t\t\tbreak;\n";
+@@ -2090,13 +2137,16 @@
+                 indent();
+                 out += "}\n";
+             }
++
++            if (forwardOnly)
++                out += "\t}\n";
+         }
+ 
+         controlFlowCode += 3;
+         instrAddress += 12;
+     }
+ 
+-    if (!simpleControlFlow)
++    if (!simpleControlFlow && !forwardOnly)
+     {
+         out += "\t\t\tbreak;\n";
+         out += "\t\t}\n";
