@@ -1,5 +1,6 @@
 > [!WARNING]
-> **Pré-release de teste (diagnóstico do Turnip).** Em relação à v0.3.0-pre2:
+> **Pré-release de teste (diagnóstico do Turnip).** Corrige a v0.3.0-pre3, que não abria o jogo
+> ("cannot locate symbol ...ShaderSourceInfo"). Em relação à v0.3.0-pre2:
 > - A causa das travadas no Turnip foi achada: um único shader do passe da cena (`EFEADDD82B576B06`), que no
 >   compilador do Turnip fica sem registradores. Com o driver do sistema (Qualcomm) não trava: use-o para jogar.
 > - Coleta para o driver, ligada por variáveis em **Driver gráfico > Variáveis**. A linha "Driver do sistema" agora
