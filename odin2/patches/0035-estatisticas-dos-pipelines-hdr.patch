@@ -1,0 +1,58 @@
+--- a/gtav/src/native/backend.cpp
++++ b/gtav/src/native/backend.cpp
+@@ -45,6 +45,7 @@
+ #include <cstdio>
+ #include <cstring>
+ #include <filesystem>
++#include <fstream>
+ #include <functional>
+ #include <string>
+ #include <unordered_map>
+@@ -310,6 +311,11 @@
+ extern uint32_t g_statRenderPasses;   // plume-gtav.patch
+ }
+ 
++// Gtavport (plume patch 0034): compiler statistics of a pipeline created with GTAVPORT_PIPELINE_STATS=1.
++namespace plume {
++std::string GetVulkanPipelineReport(RenderDevice* device, const RenderPipeline* pipeline, bool withIR);
++}
++
+ namespace gtav::native {
+ 
+ using namespace plume;
+@@ -1613,6 +1619,21 @@
+ 
+ struct Backend::Impl {
+   RenderDevice* device = nullptr;
++  // GTAVPORT_PIPELINE_STATS=1 (Driver gráfico > Variáveis): statistics and IR of each (vs, ps) pipeline that
++  // draws into the full-size HDR target, once, into logs/perf/pipeline-stats.txt (for the Turnip agent).
++  std::unordered_set<uint64_t> stats_dumped;
++  void DumpPipelineStats(uint64_t vs_hash, uint64_t ps_hash, const RenderPipeline* pipeline) {
++    if (stats_dumped.size() >= 64 || !stats_dumped.insert(vs_hash * 31 ^ ps_hash).second) return;
++    const std::string report = ::plume::GetVulkanPipelineReport(device, pipeline, true);
++    std::error_code ec;
++    std::filesystem::create_directories(ExeDir() / "logs" / "perf", ec);
++    std::ofstream f(ExeDir() / "logs" / "perf" / "pipeline-stats.txt", stats_dumped.size() == 1 ? std::ios::trunc : std::ios::app);
++    f << fmt::format("=== pipeline do passe HDR #{}: vs {:016X} ps {:016X}\n", stats_dumped.size(), vs_hash, ps_hash)
++      << (report.empty() ? std::string("  (sem estatísticas: driver sem VK_KHR_pipeline_executable_properties ou "
++                                       "pipeline criado antes do pedido)\n")
++                         : report)
++      << "\n";
++  }
+   std::unique_ptr<RenderDescriptorSet> texture_set, sampler_set;
+   std::unique_ptr<RenderPipelineLayout> layout;
+ #if GTAV_MOBILE
+@@ -4749,6 +4770,13 @@
+     if (REXCVAR_GET(gtav_native_hdr_census) && bound_depth && bound_color[0] && !bound_color[1] &&
+         bound_color[0]->format == RenderFormat::R16G16B16A16_FLOAT && bound_color[0]->width >= 640)
+       perf::DiagNoteHdrDraw(d.ps_hash);
++    static const bool pipeline_stats = [] {
++      const char* v = std::getenv("GTAVPORT_PIPELINE_STATS");
++      return v && v[0] == '1';
++    }();
++    if (pipeline_stats && bound_depth && bound_color[0] && !bound_color[1] &&
++        bound_color[0]->format == RenderFormat::R16G16B16A16_FLOAT && bound_color[0]->width >= 640)
++      DumpPipelineStats(d.vs_hash, d.ps_hash, pipeline);
+     // --gtav_native_light_coarse: coarser shading for this draw only; the pass's own rate comes back
+     // right after it (the state outlives the draw: blits and post-processing would inherit it).
+     struct RateRestore {
