@@ -1,11 +1,13 @@
 > [!WARNING]
-> **Pré-release de teste.** Base atualizada para o gtav-recomp v0.4.0 (o jogo espera um shader que falta em vez
-> de pular o desenho: corrige partes escuras). `Sleep(0)` do jogo volta a ceder a CPU em vez de dormir 100 µs
-> (upstream `7cd394a`). **Correção:** a nota da v0.2.12 atribuiu às luzes a 2x2 um ganho que veio do 2x2 em todos
-> os passes; no A/B do Odin 2 as luzes a 2x2 não mudaram o desempenho, então o padrão volta a ser Completa. Novo
-> em Logs de desempenho: **Isolar o passe HDR (10 min)**, que desliga um shader da cena por vez para achar o que
-> trava a GPU. Se o app pedir, recompile o jogo uma vez (a base mudou). Instala por cima da versão anterior
-> sem perder saves.
+> **Pré-release de teste.** Em relação à v0.3.0-pre1:
+> - O app se identifica ao driver Vulkan como **Gtavport** (motor gtav-recomp), e não mais como "plume".
+> - Novo diagnóstico para o driver: com `GTAVPORT_PIPELINE_STATS=1` em **Driver gráfico > Variáveis** (Turnip),
+>   o jogo grava em `logs/perf/pipeline-stats.txt` as estatísticas e o código compilado dos shaders do passe da
+>   cena. O "Exportar" da tela Logs de desempenho inclui o arquivo. O desempenho de uma rodada com essa variável não
+>   serve como medida, e o arquivo é derivado do seu jogo: compartilhe só com quem estiver analisando.
+>
+> Para jogar, o driver do sistema (Qualcomm) está em 60 fps na sala da árvore; o Turnip tem travadas no passe da
+> cena, ainda em investigação. Instala por cima da versão anterior sem perder saves.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.
