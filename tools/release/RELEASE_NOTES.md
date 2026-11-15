@@ -1,16 +1,14 @@
 > [!WARNING]
-> **Pré-release de teste: correção das travadas no Turnip.** Em relação à v0.3.0-pre4:
-> - O tradutor de shaders (XenosRecomp) deixa de gerar a "máquina de estados" quando o shader só tem saltos para
->   frente. Era isso que, no Turnip, esgotava os registradores no shader `EFEADDD82B576B06` e causava quadros de
->   ~250 ms. Na primeira abertura, os shaders afetados são traduzidos de novo (aviso rápido de shaders sendo
->   preparados), sem recompilar o jogo. Para voltar ao formato antigo, use a variável `XENOSRECOMP_PC_LOOP=1`.
-> - **Diagnóstico.** Mudanças na coleta para o driver:
->   - a coleta de estatísticas cria os pipelines sem o cache, para vir o código compilado completo;
->   - `GTAVPORT_PIPELINE_STATS=stats` coleta só os números;
->   - cada etapa fica registrada no `stderr.txt`;
->   - ao voltar do jogo, o menu salva o logcat do app em `logs/perf/last-session-logcat.txt` (entra no Exportar).
+> **Pré-release de teste: v0.4.1.**
+> - **Resolução 1080p:** a resolução interna tem agora a opção **150% (1080p)** (1920x1080, a tela do Odin 2), no
+>   menu do jogo (Video) e em Configurações. Exige cerca de 2,25x o trabalho da GPU de 100%; com ela, o upscaler não
+>   roda. O padrão não muda.
+> - **Travadas do Turnip** (desde a v0.3.0-pre5): corrigidas na tradução de shaders. Na sala da árvore deu 60 fps
+>   sem travadas, com a mesma imagem do driver do sistema, conferido no Odin.
+> - **Diagnóstico:** `GTAVPORT_PIPELINE_SPIRV` agora funciona sozinha. Contorno para o driver da Qualcomm, que caía
+>   ao pedir as estatísticas dos shaders.
 >
-> Ainda não testada no Odin: compare a imagem com a do driver do sistema. Instala por cima sem perder saves.
+> Instala por cima sem perder saves.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.
