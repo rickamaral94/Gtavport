@@ -140,9 +140,13 @@ public class Odin2PerfLogsActivity extends Activity {
                         new File(perfDir(), "logcat-" + base + ".txt"),
                         new File(perfDir(), "pipeline-stats.txt"),  // GTAVPORT_PIPELINE_STATS=1
                         new File(ext, "logs/gtav.log"), new File(ext, "logs/driver_status.txt"), new File(ext, "gtav_settings.ini")};
+                // GTAVPORT_PIPELINE_SPIRV: o SPIR-V do pipeline pedido (pipeline-vs_*.spv / pipeline-ps_*.spv).
+                java.util.List<File> all = new java.util.ArrayList<>(java.util.Arrays.asList(files));
+                File[] spv = perfDir().listFiles((d, n) -> n.startsWith("pipeline-") && n.endsWith(".spv"));
+                if (spv != null) all.addAll(java.util.Arrays.asList(spv));
                 try (OutputStream os = getContentResolver().openOutputStream(uri); ZipOutputStream z = new ZipOutputStream(os)) {
                     byte[] buf = new byte[1 << 16];
-                    for (File f : files) {
+                    for (File f : all) {
                         if (!f.isFile()) continue;
                         z.putNextEntry(new ZipEntry(f.getName()));
                         try (InputStream in = new FileInputStream(f)) {
