@@ -102,6 +102,30 @@ eram Turnip (Mesa fd8ef2b). A causa dos quadros de ~300 ms está no Turnip/ir3, 
 segue com o agente Turnip (PR #2). Até lá, **use o driver do sistema**. Nele o gargalo passa a ser a thread
 de render (~9,7 ms por quadro, a 60 fps).
 
+## 3c. Causa e correção das travadas no Turnip (15/11, validado no Odin)
+
+- **Shader culpado:** `EFEADDD82B576B06`. Com `GTAV_NATIVE_SKIP_PS` desligando só ele, o Turnip fica em 60 fps; com o
+  controle `311BC83470B3F7A2` desligado, nada muda.
+- **Estatísticas do ir3** (`GTAVPORT_PIPELINE_STATS=1`): ~8100 instruções no FS, 48 registradores (o teto), 4 waves,
+  400 STP / 636 LDP de spill e 1 laço.
+- **Por que o Turnip sofre:** o XenosRecomp gerava esse shader como máquina de estados `while (true) { switch (pc) }`
+  com 105 cases. No laço único, 188 phis cruzam a volta. O agente Turnip reproduziu o mesmo resultado com drm-shim
+  A740. O compilador da Qualcomm roda o mesmo shader sem custo visível.
+- **Correção** (`0041` XenosRecomp + `0042`): quando todos os saltos vão para frente e não há laço, o shader sai como
+  blocos `if (pc <= k)` em ordem, sem laço. No primeiro boot, os shaders do cache no formato antigo (290 no Odin) são
+  traduzidos de novo. `XENOSRECOMP_PC_LOOP=1` volta ao formato antigo.
+
+Resultado na v0.3.0-pre5, Turnip lab 5.9.18.1, sala da árvore, 60 s em cada uma de 3 rodadas:
+
+| | antes (pre2/pre4) | depois (pre5) | driver do sistema |
+|---|---|---|---|
+| fps | 17,9–23,0 | **60,0** | 60,0 |
+| p95 | 240–380 ms | **20,5–20,9 ms** | 20,7 ms |
+| Quadros > 100 ms em 60 s | 116–171 | **0** | 0 |
+| Passe HDR (janela lenta) | 72–111 ms | **2,8–3,1 ms** | 2,8 ms |
+
+A conferir: se a imagem ficou igual à do driver do sistema, e as estatísticas do ir3 do shader novo.
+
 ## 4. O que ainda precisa ser medido (no Odin 2)
 
 1. **Isolar o passe HDR** (Menu > Logs de desempenho > "Isolar o passe HDR (10 min)") parado na sala da árvore
