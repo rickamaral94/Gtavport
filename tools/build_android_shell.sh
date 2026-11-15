@@ -17,4 +17,14 @@ cmake -S "$G/gtav" -B "$B" -G Ninja \
   -DCMAKE_FIND_ROOT_PATH="$SDK" -Drexglue_DIR="$SDK/lib/cmake/rexglue" -DSDL3_DIR="$SDK/lib/cmake/SDL3" \
   -DCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY=ON >/dev/null
 nice cmake --build "$B" -j"${JOBS:-3}"
+# A libgtav_fast.so só pode importar da libgtav_game.so as funções do jogo (sub_*, gtavfs_*, rex_*). Um símbolo
+# gtav::native indefinido (ex.: função nossa dentro de namespace anônimo) passa no link de .so, mas o dlopen no
+# aparelho falha ("cannot locate symbol"), porque a libgtav_game.so de lá foi compilada sem ele.
+NM="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+bad=$("$NM" -D --undefined-only "$B/libgtav_fast.so" | awk '{print $NF}' | grep -E '^_ZN?K?4gtav6native' || true)
+if [ -n "$bad" ]; then
+  echo "ERRO: libgtav_fast.so importa símbolos gtav::native (o dlopen falharia no aparelho):" >&2
+  echo "$bad" >&2
+  exit 1
+fi
 ls -la "$B"/*.so
