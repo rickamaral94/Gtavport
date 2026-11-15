@@ -332,12 +332,13 @@ std::string Settings() {
   return s;
 }
 
-// Variáveis que mudam o driver: as do Gtavport (ODIN2_VK_DRIVER) e todas as do Mesa/Turnip/ir3/freedreno.
+// Variáveis que mudam o driver ou o jogo: as do Gtavport (ODIN2_VK_DRIVER, GTAV_*, GTAVPORT_*) e todas as do
+// Mesa/Turnip/ir3/freedreno.
 std::string EnvLine() {
   std::string s;
   for (char** e = environ; e && *e; ++e) {
     const std::string kv = *e;
-    for (const char* pre : {"ODIN2_VK_DRIVER=", "TU_", "IR3_", "MESA_", "FD_", "ADRENOTOOLS"})
+    for (const char* pre : {"ODIN2_VK_DRIVER=", "TU_", "IR3_", "MESA_", "FD_", "ADRENOTOOLS", "GTAV_", "GTAVPORT_"})
       if (kv.rfind(pre, 0) == 0) {
         s += kv + " ";
         break;
