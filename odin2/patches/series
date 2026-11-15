@@ -38,3 +38,4 @@ gtav        0036-forma-dos-shaders-no-relatorio.patch
 gtav        0037-spirv-e-estado-do-pipeline.patch
 plume       0038-estatisticas-nao-suportadas.patch
 gtav        0039-shadersourceinfo-publico.patch
+plume       0040-estatisticas-sem-pipeline-cache.patch
