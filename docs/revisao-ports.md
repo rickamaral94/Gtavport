@@ -197,3 +197,17 @@ corrupção por desenho no A725/A750 que some com esses flags).
 
 Cada número no PR/release leva um destes rótulos: **validado no Odin** (relatório do aparelho anexado),
 **verificado localmente** (build, testes, pureza) ou **pendente de hardware**.
+
+## 6. Segunda revisão (16/11)
+
+| Projeto | Novidade desde 13/11 | Decisão |
+|---|---|---|
+| andrewnakas/gtav-recomp | `main`/`issue-fixes` iguais (v0.4.0); `perf-linux` +27 commits, quase tudo ferramenta de medição | **incorporados** `29cb2e4`, `8a47b12`, `e0855db` (renderer, patch 0049); fora `90484b8` (cache de listagem; boot em USB) e `aefc9f2` (helpers inline, +2,6 % só no PC) |
+| itsPLK/gtav-recomp-nx2 (Switch 2, GPL-3.0) | perf medido no console: conversor de vértices sem lock (gravação −2,4 ms), ObjectTable sem lock, clamp de constantes indexadas | **incorporados** `917a7a2` + lote anterior (patch 0051) e `eddf03a` (clamp no ubo_constants, patch 0050, com retradução única dos shaders do cache); **fora** a ObjectTable sem lock (muda o tamanho da classe no SDK: exige recompilar o jogo no aparelho e ainda sem teste no Android) |
+| Artjom777/gtav-recomp-mali | ajustes de args.txt para Mali (POCO X7 Pro) | só flags de outro GPU; nada aplicável ao Adreno |
+| Rafael-G-Souza, dev-Akdelay, piyushjaiswal94, lynsin (nx2) | CI/build, plano de release do Switch 2 | nada a incorporar |
+| demais ports (Ravi9733, nullbr97, XHYN-PH, Rush5, glue5, AlgoArtist06, WALID1618Y, CurelME, lilblock1, mohitky2018) | nenhum commit | — |
+| c22dev/muguet, bytarch/gta5mobile-android | inacessíveis | — |
+
+Pendente de hardware: A/B no Odin de 0049 e 0051 (gravação por quadro em 1080p) e efeito do clamp 0050 nas
+listras perto da câmera.

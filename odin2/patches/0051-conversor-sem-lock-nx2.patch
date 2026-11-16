@@ -1,0 +1,143 @@
+--- a/gtav/src/native/backend.cpp
++++ b/gtav/src/native/backend.cpp
+@@ -525,9 +525,12 @@
+ // vertices, ~7-8 MB a frame in the open world on a phone, never cached) is converted by workers
+ // while the frame is recorded, straight into its upload memory; Execute waits for all of it
+ // before the command list can be submitted. The render thread helps when it waits.
++// Gtavport: StreamConverter from gtav-recomp-nx2 (itsPLK, GPL-3.0) 917a7a2 and the batching before it:
++// jobs handed over in a ring with CAS claims, the mutex only for sleeping workers (Switch 2: record
++// thread -2.4 ms). Our Android affinity block (not the prime core) is kept.
+ class StreamConverter {
+  public:
+-  explicit StreamConverter(int threads) {
++  explicit StreamConverter(int threads) : ring_(new StreamJob[kCapacity]) {
+     for (int i = 0; i < threads; i++)
+       workers_.emplace_back([this] {
+ #ifdef __ANDROID__
+@@ -539,53 +542,100 @@
+           sched_setaffinity(0, sizeof(set), &set);
+         }
+ #endif
+-        std::unique_lock lock(mutex_);
+         for (;;) {
+-          cv_.wait(lock, [&] { return stop_ || next_ < jobs_.size(); });
+-          if (stop_) return;
+-          RunOne(lock);
++          if (RunSome()) continue;
++          // Nothing claimable: spin a little (the render thread publishes every kBatch draws),
++          // then sleep until Flush sees a sleeper.
++          bool got = false;
++          for (int spin = 0; spin < kSpins && !got; spin++) {
++            if (stop_.load(std::memory_order_acquire)) return;
++            std::this_thread::yield();
++            got = Available();
++          }
++          if (got) continue;
++          std::unique_lock lock(mutex_);
++          sleepers_.fetch_add(1, std::memory_order_seq_cst);
++          cv_.wait(lock, [&] { return stop_.load(std::memory_order_seq_cst) || Available(); });
++          sleepers_.fetch_sub(1, std::memory_order_relaxed);
++          if (stop_.load(std::memory_order_acquire)) return;
+         }
+       });
+   }
+   ~StreamConverter() {
+     {
+       std::lock_guard lock(mutex_);
+-      stop_ = true;
++      stop_.store(true, std::memory_order_seq_cst);
+     }
+     cv_.notify_all();
+     for (auto& w : workers_) w.join();
+   }
++  // Jobs are handed over in batches without a lock: the render thread fills ring_ and publishes a
++  // batch by moving published_; workers claim runs of up to kClaim with a CAS on next_. The mutex
++  // is only for sleeping workers. (Switch 2 profiles: one lock + wake per job cost the render
++  // thread ~17% in svcArbitrateLock; batched under a mutex still ~9%, the workers' claims and
++  // completions colliding with Flush.)
++  static constexpr size_t kBatch = 32;
+   void Push(const StreamJob& job) {
+-    {
+-      std::lock_guard lock(mutex_);
+-      jobs_.push_back(job);
++    if (filled_ == kCapacity) {  // a frame with more jobs than the ring: the rest inline
++      ConvertStream(job);
++      return;
++    }
++    ring_[filled_++] = job;
++    if (filled_ - published_.load(std::memory_order_relaxed) >= kBatch) Flush();
++  }
++  void Flush() {
++    if (filled_ == published_.load(std::memory_order_relaxed)) return;
++    published_.store(filled_, std::memory_order_seq_cst);
++    if (sleepers_.load(std::memory_order_seq_cst) > 0) {
++      { std::lock_guard lock(mutex_); }  // a worker between its check and cv wait sees it after this
++      cv_.notify_all();
+     }
+-    cv_.notify_one();
+   }
+-  // All pushed jobs are done when this returns; the next frame starts with an empty list.
++  // All pushed jobs are done when this returns; the next frame starts with an empty ring.
+   void Finish() {
+-    std::unique_lock lock(mutex_);
+-    while (next_ < jobs_.size()) RunOne(lock);
+-    done_cv_.wait(lock, [&] { return done_ == jobs_.size(); });
+-    jobs_.clear();
+-    next_ = done_ = 0;
++    Flush();
++    while (RunSome()) {
++    }
++    while (done_.load(std::memory_order_acquire) != filled_) std::this_thread::yield();
++    // Every job is claimed and done: no worker reads the ring or holds a claim. Reset published_
++    // before next_ so that a worker that sees the new next_ also sees the new published_.
++    published_.store(0, std::memory_order_seq_cst);
++    done_.store(0, std::memory_order_relaxed);
++    next_.store(0, std::memory_order_seq_cst);
++    filled_ = 0;
+   }
+ 
+  private:
+-  void RunOne(std::unique_lock<std::mutex>& lock) {
+-    // jobs_ only grows while jobs run (Finish clears it after all are done): the copy is stable.
+-    StreamJob job = jobs_[next_++];
+-    lock.unlock();
+-    ConvertStream(job);
+-    lock.lock();
+-    if (++done_ == jobs_.size()) done_cv_.notify_all();
++  static constexpr size_t kClaim = 8;
++  static constexpr size_t kCapacity = 4096;  // city frames: ~400-500 jobs
++  static constexpr int kSpins = 64;
++  bool Available() const {
++    return next_.load(std::memory_order_seq_cst) < published_.load(std::memory_order_seq_cst);
++  }
++  // Claims and converts up to kClaim published jobs; false when none was claimable.
++  bool RunSome() {
++    size_t n = next_.load(std::memory_order_acquire);
++    size_t take;
++    for (;;) {
++      size_t avail = published_.load(std::memory_order_acquire);
++      if (n >= avail) return false;
++      take = std::min(kClaim, avail - n);
++      if (next_.compare_exchange_weak(n, n + take, std::memory_order_acq_rel, std::memory_order_acquire)) break;
++    }
++    for (size_t i = 0; i < take; i++) ConvertStream(ring_[n + i]);
++    done_.fetch_add(take, std::memory_order_acq_rel);
++    return true;
+   }
+   std::vector<std::thread> workers_;
++  std::unique_ptr<StreamJob[]> ring_;
++  size_t filled_ = 0;                    // render thread only
++  std::atomic<size_t> published_{0};     // jobs [0, published_) may be claimed
++  std::atomic<size_t> next_{0};          // first unclaimed job
++  std::atomic<size_t> done_{0};          // jobs converted
++  std::atomic<int> sleepers_{0};
++  std::atomic<bool> stop_{false};
+   std::mutex mutex_;
+-  std::condition_variable cv_, done_cv_;
+-  std::vector<StreamJob> jobs_;
+-  size_t next_ = 0, done_ = 0;
+-  bool stop_ = false;
++  std::condition_variable cv_;
+ };
+ 
+ float HalfToFloat(uint16_t h) {
