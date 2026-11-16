@@ -1,14 +1,13 @@
 > [!WARNING]
-> **Pré-release de teste: v0.4.1.**
-> - **Resolução 1080p:** a resolução interna tem agora a opção **150% (1080p)** (1920x1080, a tela do Odin 2), no
->   menu do jogo (Video) e em Configurações. Exige cerca de 2,25x o trabalho da GPU de 100%; com ela, o upscaler não
->   roda. O padrão não muda.
-> - **Travadas do Turnip** (desde a v0.3.0-pre5): corrigidas na tradução de shaders. Na sala da árvore deu 60 fps
->   sem travadas, com a mesma imagem do driver do sistema, conferido no Odin.
-> - **Diagnóstico:** `GTAVPORT_PIPELINE_SPIRV` agora funciona sozinha. Contorno para o driver da Qualcomm, que caía
->   ao pedir as estatísticas dos shaders.
+> **Pré-release de teste: v0.4.2.** Ganhos de CPU trazidos de outros ports, ainda por medir no Odin:
+> - **Do upstream (branch perf-linux):** a thread de render para menos e reaproveita constantes que não mudaram.
+> - **Do port do Switch 2 (gtav-recomp-nx2):**
+>   - conversor de vértices sem trava (lá: -2,4 ms por quadro na thread de gravação);
+>   - tabela de objetos do kernel sem trava nas buscas (lá a thread principal passava ~18% do tempo esperando nela);
+>   - leituras de constantes indexadas limitadas à tabela (índice negativo lia fora do buffer).
 >
-> Instala por cima sem perder saves.
+> **Recompile o jogo uma vez** quando o app pedir (a base do kernel mudou). Na primeira abertura, alguns shaders
+> são traduzidos de novo. Instala por cima sem perder saves.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.

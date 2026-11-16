@@ -46,7 +46,7 @@ gtav        0044-estatisticas-modo-stats-no-backend.patch
 plume       0045-estatisticas-sem-consulta-de-contagem.patch
 gtav        0046-spirv-sem-estatisticas.patch
 gtav        0047-resolucao-1080p.patch
-gtav        0048-versao-0.4.1.patch
+gtav        0048-versao-do-apk.patch
 gtav        0049-upstream-perf-linux-renderer.patch
 gtav        0050-ubo-indice-limitado.patch
 gtav        0051-conversor-sem-lock-nx2.patch
