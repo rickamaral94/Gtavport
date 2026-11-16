@@ -50,3 +50,4 @@ gtav        0048-versao-0.4.1.patch
 gtav        0049-upstream-perf-linux-renderer.patch
 gtav        0050-ubo-indice-limitado.patch
 gtav        0051-conversor-sem-lock-nx2.patch
+rexglue-sdk 0052-objecttable-sem-lock-nx2.patch

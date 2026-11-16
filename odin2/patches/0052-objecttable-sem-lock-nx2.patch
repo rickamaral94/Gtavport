@@ -1,0 +1,257 @@
+# Gtavport: ObjectTable de itsPLK/gtav-recomp-nx2 (GPL-3.0), f9ddf02 (mutex próprio da tabela em vez da região
+# crítica global) + f143b49 (buscas sem lock entre si; escritores raros esperam as buscas em voo). No Switch 2 a
+# thread principal do GTA V passava ~8% + ~10% do tempo bloqueada aqui. Muda o tamanho da classe: o jogo precisa
+# ser recompilado no aparelho (a chave de ABI muda junto com o toolroot).
+--- a/include/rex/system/util/object_table.h
++++ b/include/rex/system/util/object_table.h
+@@ -18,6 +18,8 @@
+ #include <rex/system/xobject.h>
+ #include <rex/system/xtypes.h>
+ #include <rex/thread/mutex.h>
++#include <atomic>
++#include <mutex>
+ 
+ namespace rex::stream {
+ class ByteStream;
+@@ -96,6 +98,21 @@
+   bool Resize(uint32_t new_capacity);
+ 
+   rex::thread::global_critical_region global_critical_region_;
++  // The table itself (slots, capacity, resize). Mutators take the global region first, then this;
++  // LookupObject takes only this, so handle lookups (every NtSetEvent, NtReleaseSemaphore,
++  // NtWaitForSingleObject) no longer serialise on the process-wide region (Switch 2: ~8% of GTA V's
++  // main thread waited there).
++  std::recursive_mutex table_mutex_;
++  // Lookups do not take table_mutex_ either: on Switch 2 GTA V's main thread still spent ~10% of
++  // its time blocked in it, lookups queueing behind each other. A lookup only reads a slot and
++  // retains the object, so lookups run concurrently (readers_), and the rare writers that move the
++  // table or empty a slot (resize, add, remove, reset, purge, restore; always under table_mutex_,
++  // so one at a time) raise writer_ and wait until the lookups in flight have left.
++  std::atomic<uint32_t> readers_{0};
++  std::atomic<bool> writer_{false};
++  void BeginLookup();
++  void EndLookup() { readers_.fetch_sub(1, std::memory_order_release); }
++  class ExclusiveSlots;  // RAII writer side, see object_table.cpp
+   std::mutex name_mutex_;
+   uint32_t table_capacity_ = 0;
+   ObjectTableEntry* table_ = nullptr;
+--- a/src/system/util/object_table.cpp
++++ b/src/system/util/object_table.cpp
+@@ -11,6 +11,7 @@
+ 
+ #include <algorithm>
+ #include <cstring>
++#include <thread>
+ 
+ #include <rex/logging.h>
+ #include <rex/stream.h>
+@@ -20,6 +21,31 @@
+ 
+ namespace rex::system::util {
+ 
++// Writer side of the lookup guard (see readers_ in the header). Callers hold table_mutex_.
++// Not reentrant: nothing under it may look up a handle or start another ExclusiveSlots.
++class ObjectTable::ExclusiveSlots {
++ public:
++  explicit ExclusiveSlots(ObjectTable& t) : t_(t) {
++    t_.writer_.store(true, std::memory_order_seq_cst);
++    while (t_.readers_.load(std::memory_order_seq_cst) != 0) std::this_thread::yield();
++  }
++  ~ExclusiveSlots() { t_.writer_.store(false, std::memory_order_release); }
++  ExclusiveSlots(const ExclusiveSlots&) = delete;
++  ExclusiveSlots& operator=(const ExclusiveSlots&) = delete;
++
++ private:
++  ObjectTable& t_;
++};
++
++void ObjectTable::BeginLookup() {
++  for (;;) {
++    readers_.fetch_add(1, std::memory_order_seq_cst);
++    if (!writer_.load(std::memory_order_seq_cst)) return;
++    readers_.fetch_sub(1, std::memory_order_seq_cst);
++    while (writer_.load(std::memory_order_acquire)) std::this_thread::yield();
++  }
++}
++
+ ObjectTable::ObjectTable() {}
+ 
+ ObjectTable::~ObjectTable() {
+@@ -28,19 +54,26 @@
+ 
+ void ObjectTable::Reset() {
+   auto global_lock = global_critical_region_.Acquire();
++  std::lock_guard<std::recursive_mutex> table_lock(table_mutex_);
+ 
+-  // Release all objects.
+-  for (uint32_t n = 0; n < table_capacity_; n++) {
+-    ObjectTableEntry& entry = table_[n];
++  ObjectTableEntry* old_table;
++  uint32_t old_capacity;
++  {
++    ExclusiveSlots exclusive(*this);
++    old_table = table_;
++    old_capacity = table_capacity_;
++    table_capacity_ = 0;
++    last_free_entry_ = 0;
++    table_ = nullptr;
++  }
++  // Release all objects (outside the guard: a destructor may look handles up).
++  for (uint32_t n = 0; n < old_capacity; n++) {
++    ObjectTableEntry& entry = old_table[n];
+     if (entry.object) {
+       entry.object->Release();
+     }
+   }
+-
+-  table_capacity_ = 0;
+-  last_free_entry_ = 0;
+-  free(table_);
+-  table_ = nullptr;
++  free(old_table);
+ }
+ 
+ X_STATUS ObjectTable::FindFreeSlot(uint32_t* out_slot) {
+@@ -78,6 +111,7 @@
+ bool ObjectTable::Resize(uint32_t new_capacity) {
+   uint32_t new_size = new_capacity * sizeof(ObjectTableEntry);
+   uint32_t old_size = table_capacity_ * sizeof(ObjectTableEntry);
++  ExclusiveSlots exclusive(*this);  // realloc may move the table under a lookup
+   auto new_table = reinterpret_cast<ObjectTableEntry*>(realloc(table_, new_size));
+   if (!new_table) {
+     return false;
+@@ -101,6 +135,7 @@
+   uint32_t handle = 0;
+   {
+     auto global_lock = global_critical_region_.Acquire();
++    std::lock_guard<std::recursive_mutex> table_lock(table_mutex_);
+ 
+     // Find a free slot.
+     uint32_t slot = 0;
+@@ -109,7 +144,10 @@
+     // Stash.
+     if (XSUCCEEDED(result)) {
+       ObjectTableEntry& entry = table_[slot];
+-      entry.object = object;
++      {
++        ExclusiveSlots exclusive(*this);
++        entry.object = object;
++      }
+       entry.handle_ref_count = 1;
+       handle = XObject::kHandleBase + (slot << 2);
+       object->handles().push_back(handle);
+@@ -147,6 +185,7 @@
+ 
+ X_STATUS ObjectTable::RetainHandle(X_HANDLE handle) {
+   auto global_lock = global_critical_region_.Acquire();
++  std::lock_guard<std::recursive_mutex> table_lock(table_mutex_);
+ 
+   ObjectTableEntry* entry = LookupTable(handle);
+   if (!entry) {
+@@ -159,6 +198,7 @@
+ 
+ X_STATUS ObjectTable::ReleaseHandle(X_HANDLE handle) {
+   auto global_lock = global_critical_region_.Acquire();
++  std::lock_guard<std::recursive_mutex> table_lock(table_mutex_);
+ 
+   ObjectTableEntry* entry = LookupTable(handle);
+   if (!entry) {
+@@ -189,9 +229,15 @@
+   }
+ 
+   auto global_lock = global_critical_region_.Acquire();
++
++  std::lock_guard<std::recursive_mutex> table_lock(table_mutex_);
+   if (entry->object) {
+     auto object = entry->object;
+-    entry->object = nullptr;
++    {
++      // After this no lookup can reach the object; lookups in flight have retained it already.
++      ExclusiveSlots exclusive(*this);
++      entry->object = nullptr;
++    }
+     assert_zero(entry->handle_ref_count);
+     entry->handle_ref_count = 0;
+ 
+@@ -216,6 +262,7 @@
+ 
+ std::vector<object_ref<XObject>> ObjectTable::GetAllObjects() {
+   auto lock = global_critical_region_.Acquire();
++  std::lock_guard<std::recursive_mutex> table_lock(table_mutex_);
+   std::vector<object_ref<XObject>> results;
+ 
+   for (uint32_t slot = 0; slot < table_capacity_; slot++) {
+@@ -231,13 +278,17 @@
+ 
+ void ObjectTable::PurgeAllObjects() {
+   auto lock = global_critical_region_.Acquire();
++  std::lock_guard<std::recursive_mutex> table_lock(table_mutex_);
+   for (uint32_t slot = 0; slot < table_capacity_; slot++) {
+     auto& entry = table_[slot];
+     if (entry.object && !entry.object->is_host_object()) {
+       entry.handle_ref_count = 0;
+-      entry.object->Release();
+-
+-      entry.object = nullptr;
++      XObject* object = entry.object;
++      {
++        ExclusiveSlots exclusive(*this);
++        entry.object = nullptr;
++      }
++      object->Release();
+     }
+   }
+ }
+@@ -250,6 +301,8 @@
+ 
+   auto global_lock = global_critical_region_.Acquire();
+ 
++  std::lock_guard<std::recursive_mutex> table_lock(table_mutex_);
++
+   // Lower 2 bits are ignored.
+   uint32_t slot = GetHandleSlot(handle);
+   if (slot < table_capacity_) {
+@@ -274,9 +327,9 @@
+   }
+ 
+   XObject* object = nullptr;
+-  if (!already_locked) {
+-    global_critical_region_.mutex().lock();
+-  }
++  // No lock (see readers_): the slot read and an atomic Retain only need the table to hold still.
++  (void)already_locked;
++  BeginLookup();
+ 
+   // Lower 2 bits are ignored.
+   uint32_t slot = GetHandleSlot(handle);
+@@ -293,16 +346,14 @@
+   if (object) {
+     object->Retain();
+   }
+-
+-  if (!already_locked) {
+-    global_critical_region_.mutex().unlock();
+-  }
++  EndLookup();
+ 
+   return object;
+ }
+ 
+ void ObjectTable::GetObjectsByType(XObject::Type type, std::vector<object_ref<XObject>>* results) {
+   auto global_lock = global_critical_region_.Acquire();
++  std::lock_guard<std::recursive_mutex> table_lock(table_mutex_);
+   for (uint32_t slot = 0; slot < table_capacity_; ++slot) {
+     auto& entry = table_[slot];
+     if (entry.object) {
+@@ -400,8 +451,10 @@
+ 
+   if (table_capacity_ > slot) {
+     auto& entry = table_[slot];
+-    entry.object = object;
+     object->Retain();
++    std::lock_guard<std::recursive_mutex> table_lock(table_mutex_);
++    ExclusiveSlots exclusive(*this);
++    entry.object = object;
+   }
+ 
+   return X_STATUS_SUCCESS;
