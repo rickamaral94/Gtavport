@@ -47,3 +47,4 @@ plume       0045-estatisticas-sem-consulta-de-contagem.patch
 gtav        0046-spirv-sem-estatisticas.patch
 gtav        0047-resolucao-1080p.patch
 gtav        0048-versao-0.4.1.patch
+gtav        0049-upstream-perf-linux-renderer.patch

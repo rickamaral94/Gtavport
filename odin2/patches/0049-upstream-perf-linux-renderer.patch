@@ -1,0 +1,302 @@
+# Gtavport: andrewnakas/gtav-recomp perf-linux 29cb2e4 + 8a47b12 + e0855db (GPL-3.0), sem a parte de
+# afinidade do Linux (linux_threads). Menos paradas da thread de render (pipeline cache fora dela),
+# reuso do bloco de constantes compartilhado, push constants iguais puladas, memo de blocos de fetch.
+--- a/gtav/src/native/backend.cpp
++++ b/gtav/src/native/backend.cpp
+@@ -151,7 +151,9 @@
+ #define GTAV_BUFFER_BUDGET_DEFAULT 96
+ #define GTAV_LOW_MEMORY_DEFAULT 600
+ #else
+-#define GTAV_BUFFER_BUDGET_DEFAULT 0
++// Desktop: 169,000 cached buffers after an hour of driving (most of them stale); 512 MB keeps the map
++// bounded. Idle buffers (2 s unused) are re-converted on their next use.
++#define GTAV_BUFFER_BUDGET_DEFAULT 512
+ #define GTAV_LOW_MEMORY_DEFAULT 0
+ #endif
+ REXCVAR_DEFINE_INT32(gtav_native_buffer_budget_mb, GTAV_BUFFER_BUDGET_DEFAULT, "GTAV",
+@@ -1811,6 +1813,10 @@
+     return it == resolved_latest.end() ? nullptr : &resolved[it->second];
+   }
+   std::unordered_map<uint64_t, CachedTexture> textures;
++  // Running byte totals of `textures` (t.bytes) and `buffers` (b.size): the budget check used to walk
++  // both maps every 60 frames (169,000 buffers after an hour of driving = a periodic hitch).
++  // Re-summed every 600 frames in case an update path was missed.
++  uint64_t texture_bytes_total = 0, buffer_bytes_total = 0;
+   std::unordered_map<uint64_t, uint32_t> samplers;  // desc hash -> descriptor index
+   std::vector<std::unique_ptr<RenderSampler>> sampler_objects;
+   // Erased only by the buffer budget (EvictTexturesOverBudget), which then clears buffer_memo.
+@@ -2213,6 +2219,7 @@
+         } push{0, uint32_t(cmd.GetTexID()) ? uint32_t(cmd.GetTexID()) : menu_font_descriptor, blit_sampler,
+                {2.0f / w, 2.0f / h}};
+         list->setGraphicsPushConstants(0, &push, 0, sizeof(push));
++        draw_state.push_set = false;  // not a game draw: the next DrawImpl pushes its addresses again
+         list->drawIndexedInstanced(cmd.ElemCount, 1, cmd.IdxOffset, int32_t(cmd.VtxOffset), 0);
+       }
+     }
+@@ -2403,11 +2410,17 @@
+     const uint64_t min_idle = low_memory ? 30 : 120;
+     uint64_t budget = uint64_t(std::max(64, REXCVAR_GET(gtav_native_texture_budget_mb))) << 20;
+     if (low_memory) budget /= 2;
+-    uint64_t total = 0;
+-    for (const auto& [key, t] : textures)
+-      if (t.texture) total += t.bytes;
+-    uint64_t buffer_bytes = 0;
+-    for (const auto& [key, b] : buffers) buffer_bytes += b.buffer ? b.size : 0;
++    if (frame % 600 == 0) {  // resync the running totals (and report drift once)
++      uint64_t tt = 0, bb = 0;
++      for (const auto& [key, t] : textures) tt += t.bytes;
++      for (const auto& [key, b] : buffers) bb += b.size;
++      if ((tt != texture_bytes_total || bb != buffer_bytes_total) && total_drift_logs++ < 5)
++        REXLOG_WARN("[native] cache totals drifted: textures {} vs {} MB, buffers {} vs {} MB",
++                    texture_bytes_total >> 20, tt >> 20, buffer_bytes_total >> 20, bb >> 20);
++      texture_bytes_total = tt, buffer_bytes_total = bb;
++    }
++    uint64_t total = texture_bytes_total;
++    uint64_t buffer_bytes = buffer_bytes_total;
+     // Buffers: released entries are erased (169,000 empty ones after an hour of driving) and the
+     // memo in front of the map forgets them; the next use converts the guest data again.
+     if (uint64_t bbudget = uint64_t(std::max(0, REXCVAR_GET(gtav_native_buffer_budget_mb))) << 20;
+@@ -2428,6 +2441,7 @@
+           dead_buffers.push_back(std::move(it->second.buffer));  // an in-flight frame may read it
+           released++;
+         }
++        buffer_bytes_total -= it->second.size;
+         buffers.erase(it);
+       }
+       buffer_memo.fill({});
+@@ -2461,6 +2475,7 @@
+       if (t.texture) freed_bytes += t.bytes;
+       if (t.view) dead_views.push_back(std::move(t.view));
+       if (t.texture) dead_textures.push_back(std::move(t.texture));
++      texture_bytes_total -= t.bytes;
+       textures.erase(it);
+       released++;
+     }
+@@ -2469,7 +2484,7 @@
+       REXLOG_INFO("[native] texture budget: released {} textures ({:.0f} MB), {} cached ({:.0f} MB)", released,
+                   freed_bytes / 1048576.0, textures.size(), (total - freed_bytes) / 1048576.0);
+   }
+-  uint32_t budget_logs = 0, buffer_budget_logs = 0, low_memory_logs = 0;
++  uint32_t budget_logs = 0, buffer_budget_logs = 0, low_memory_logs = 0, total_drift_logs = 0;
+ 
+   void EvictTextures() {
+     EvictTexturesOverBudget();
+@@ -2491,6 +2506,7 @@
+       }
+       if (t.view) dead_views.push_back(std::move(t.view));
+       if (t.texture) dead_textures.push_back(std::move(t.texture));
++      texture_bytes_total -= t.bytes;
+       textures.erase(it);
+       released++;
+     }
+@@ -3103,6 +3119,7 @@
+       conv_bytes[3] += host_size;
+       conv_draws[3]++;
+       b.content = content;
++      buffer_bytes_total += host_size - b.size;
+       b.size = host_size;
+     }
+     b.checked_frame = frame;
+@@ -3216,6 +3233,7 @@
+     uint64_t content = Hash(dec.data.data(), std::min<size_t>(dec.data.size(), 1 << 20));
+     t.checked_frame = frame;
+     t.raw_hash = raw;
++    texture_bytes_total += dec.data.size() - t.bytes;
+     t.bytes = dec.data.size();
+     if (t.texture && t.content == content) return t.descriptor;
+     t.content = content;
+@@ -3435,6 +3453,7 @@
+     list->setPipeline(pipeline.get());
+     const float push[4] = {color.r, color.g, color.b, color.a};
+     list->setGraphicsPushConstants(0, push, 0, sizeof(push));
++    draw_state.push_set = false;  // not a game draw: the next DrawImpl pushes its addresses again
+     RenderViewport vp(0.0f, 0.0f, float(Sz(t->width, t->scale)), float(Sz(t->height, t->scale)));
+     RenderViewport vps[4] = {vp, vp, vp, vp};
+     list->setViewports(vps, std::max(n, 1u));
+@@ -3905,6 +3924,8 @@
+     bool index_bound = false;
+     bool bias_set = false;
+     float bias[2] = {};  // constant, slope
++    bool push_set = false;
++    uint64_t push[3] = {};  // vs, ps, shared constant addresses
+   } draw_state;
+   uint32_t bias_logged = 0;
+   std::unordered_set<uint64_t> bias_seen;
+@@ -3948,6 +3969,18 @@
+     uint32_t offset = 0;
+     bool valid = false;
+   } fetch_cache;
++  // Fetch blocks keyed by content: a material drawn again (hundreds of times a frame) gets its
++  // 192 shared-constant words back without the 32-slot loop. Valid for the slot generation only,
++  // like the slot memo: a resolve or a new frame can change what a block's textures are.
++  struct BlockMemo {
++    uint64_t hash = 0;
++    uint32_t generation = 0;
++    std::array<uint32_t, 192> sc{};
++    std::array<uint8_t, 768> block{};
++  };
++  static constexpr uint32_t kBlockMemoSize = 1024;
++  std::vector<BlockMemo> block_memo = std::vector<BlockMemo>(kBlockMemoSize);
++  uint64_t block_memo_hits = 0;
+   // Per-slot memo of TextureDescriptor + SamplerDescriptor, keyed by the six fetch words:
+   // ~20,000 slot lookups a frame repeat a few hundred fetch constants. Results only change at a
+   // resolve or a new frame, which bump the generation.
+@@ -3971,6 +4004,14 @@
+     bool valid = false;
+   };
+   LastConstants last_vs, last_ps;
++  // The shared block (texture/sampler slots, booleans, alpha threshold) is the same for most
++  // consecutive draws: reuse the previous draw's upload when the 1,792 bytes match (a memcmp is
++  // far cheaper than writing them to write-combined memory again, ~7 MB a frame at 3,600 draws).
++  struct LastShared {
++    alignas(16) uint8_t cpu[kSharedConstantsSize];
++    UploadAllocation gpu{};
++    bool valid = false;
++  } last_shared;
+ 
+   // Only the registers the shader reads (`use`, all when null) are swapped: the rest of the block
+   // is undefined.
+@@ -4367,6 +4408,19 @@
+     bool fetch_cached = !dumping && fetch_cache.valid && fetch_cache.offset == d.fetch;
+     if (fetch_cached) std::memcpy(sc, fetch_cache.sc.data(), sizeof(fetch_cache.sc));
+     tprof.cached_blocks += fetch_cached;
++    BlockMemo* bm = nullptr;
++    if (!fetch_cached && !dumping) {
++      uint64_t h = Hash(fetch, 768);
++      bm = &block_memo[h & (kBlockMemoSize - 1)];
++      if (bm->generation == slot_generation && bm->hash == h && std::memcmp(bm->block.data(), fetch, 768) == 0) {
++        std::memcpy(sc, bm->sc.data(), sizeof(bm->sc));
++        block_memo_hits++;
++        fetch_cached = true;
++        bm = nullptr;
++      } else {
++        bm->hash = h;
++      }
++    }
+     auto slots_start = prof.on ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+     for (uint32_t slot = 0; slot < 32 && !fetch_cached; slot++) {
+       uint32_t words[6];
+@@ -4462,11 +4516,16 @@
+     if (!fetch_cached && prof.on)
+       tprof.descriptor_ms +=
+           8 * std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - slots_start).count();
+-    if (!fetch_cached && !dumping) {
++    if (!dumping && (!fetch_cached || bm == nullptr)) {
+       std::memcpy(fetch_cache.sc.data(), sc, sizeof(fetch_cache.sc));
+       fetch_cache.offset = d.fetch;
+       fetch_cache.valid = true;
+     }
++    if (bm) {  // a block memo miss: remember this block's words
++      std::memcpy(bm->sc.data(), sc, sizeof(bm->sc));
++      std::memcpy(bm->block.data(), fetch, 768);
++      bm->generation = slot_generation;
++    }
+     prof.Mark(prof.fetch);
+     const uint8_t* bools = r;  // the shadow starts with the 0x4900 bool constants
+     sc[128] = (be32(bools) & 0xFFFF) | (be32(bools + 16) & 0xFFFF) << 16;
+@@ -4864,10 +4923,22 @@
+         ds.bias_set = true;
+       }
+     }
+-    auto shared = upload.Allocate(kSharedConstantsSize);
+-    std::memcpy(shared.cpu, shared_cpu, kSharedConstantsSize);
++    UploadAllocation shared;
++    if (last_shared.valid && std::memcmp(last_shared.cpu, shared_cpu, kSharedConstantsSize) == 0) {
++      shared = last_shared.gpu;
++    } else {
++      shared = upload.Allocate(kSharedConstantsSize);
++      std::memcpy(shared.cpu, shared_cpu, kSharedConstantsSize);
++      std::memcpy(last_shared.cpu, shared_cpu, kSharedConstantsSize);
++      last_shared.gpu = shared;
++      last_shared.valid = true;
++    }
+     uint64_t push[3] = {vsc.gpu, psc.gpu, shared.gpu};
+-    list->setGraphicsPushConstants(0, push, 0, sizeof(push));
++    if (!ds.push_set || std::memcmp(ds.push, push, sizeof(push)) != 0) {
++      list->setGraphicsPushConstants(0, push, 0, sizeof(push));
++      std::memcpy(ds.push, push, sizeof(push));
++      ds.push_set = true;
++    }
+ #if GTAV_MOBILE
+     if (RenderDescriptorSet* cs = ConstantSet(vsc.buffer, psc.buffer, shared.buffer)) {
+       const uint32_t offsets[3] = {uint32_t(vsc.offset), uint32_t(psc.offset), uint32_t(shared.offset)};
+@@ -5176,6 +5247,7 @@
+                        (words[1] & 0x3F) == 23 ? 1 : 0};
+     std::memcpy(&push[4], &one, 4);
+     list->setGraphicsPushConstants(0, push, 0, sizeof(push));
++    draw_state.push_set = false;  // not a game draw: the next DrawImpl pushes its addresses again
+     list->drawInstanced(3, 1, 0, 0);
+     if (dumping && dump_small_readback && dump_small.size() < kSmallSlots) {
+       // Centre texels of the packed word, to compare the stencil byte with the emulator's.
+@@ -5613,6 +5685,7 @@
+       uint32_t mode, index;
+     } push{int32_t(px) - int32_t(x1), int32_t(py) - int32_t(y1), scale, mode, dst.storage_index};
+     list->setGraphicsPushConstants(0, &push, 0, sizeof(push));
++    draw_state.push_set = false;  // not a game draw: the next DrawImpl pushes its addresses again
+     RenderViewport vp(float(x1), float(y1), float(x2 - x1), float(y2 - y1));
+     RenderRect sc{int32_t(x1), int32_t(y1), int32_t(x2), int32_t(y2)};
+     RenderViewport vps[4] = {vp, vp, vp, vp};
+@@ -5938,6 +6011,7 @@
+       int32_t push[6] = {int32_t(src_descriptor), 0, sx1 - spx, sy1 - spy, 0, mode};
+       std::memcpy(&push[4], &scale, 4);
+       list->setGraphicsPushConstants(0, push, 0, sizeof(push));
++      draw_state.push_set = false;  // not a game draw: the next DrawImpl pushes its addresses again
+       list->drawInstanced(3, 1, 0, 0);
+     } else if (src->msaa) {
+       Transition(list, src->texture.get(), RenderTextureLayout::RESOLVE_SOURCE);
+@@ -6056,6 +6130,7 @@
+   s.tile_alias_done.clear();
+   write_watch::Harvest();  // before this frame's texture and buffer lookups
+   s.last_vs.valid = s.last_ps.valid = false;  // upload memory is per frame
++  s.last_shared.valid = false;
+   s.fetch_cache.valid = false;
+   s.slot_generation++;
+   s.EvictTextures();
+@@ -6173,8 +6248,8 @@
+                   "({:.2f} ms), {:.0f} full hashes of {:.1f} MB ({:.2f} ms)",
+                   t.lookups / n, t.cached_blocks / n, t.sampled / n, t.sampled_ms / n, t.full / n,
+                   t.full_bytes / n / 1048576.0, t.full_ms / n);
+-      REXLOG_INFO("[native]   texture ms per frame: slots {:.2f}, {:.0f} slots from the memo",
+-                  t.descriptor_ms / n, s.slot_memo_hits / n);
++      REXLOG_INFO("[native]   texture ms per frame: slots {:.2f}, {:.0f} slots from the memo, {:.0f} blocks from the memo",
++                  t.descriptor_ms / n, s.slot_memo_hits / n, s.block_memo_hits / n);
+       if (s.prehash_on) {
+         REXLOG_INFO("[native]   hashed ahead per frame: {:.0f} used, {:.0f} not ready yet, {:.0f} not listed "
+                     "(hashed on the render thread), {:.2f} ms to start",
+@@ -6195,6 +6270,7 @@
+         s.tstats_watched_buffers = 0;
+       }
+       s.slot_memo_hits = 0;
++      s.block_memo_hits = 0;
+       t = {};
+       a = {};
+       s.prof_frames = 0;
+--- a/gtav/src/native/renderer.cpp
++++ b/gtav/src/native/renderer.cpp
+@@ -1003,14 +1003,19 @@
+     if (!pipelines_since_save_ || now - last_cache_save_ < std::chrono::seconds(20)) return;
+     last_cache_save_ = now;
+     pipelines_since_save_ = 0;
+-    auto get_start = std::chrono::steady_clock::now();
+-    std::vector<uint8_t> data = plume::GetVulkanPipelineCacheData(device_.get());
+-    double get_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - get_start).count();
+-    if (data.empty()) return;
+-    // The file is written by a background thread: ~33 MB on the busy E: disk took ~2 s, a freeze
+-    // every 20 s while the renderer (and so the guest, through the swap wait) waited for it.
++    // Both the get (vkGetPipelineCacheData copies the whole cache: ~9 ms for 17 MB, a render-thread
++    // stall every 20 s while new pipelines appear) and the write (~33 MB on the busy E: disk took
++    // ~2 s) run on a background thread. The pipeline cache is internally synchronized: the compile
++    // workers already create pipelines against it from several threads at once.
+     if (cache_writing_.exchange(true)) return;  // the previous save is still being written
+-    std::thread([this, data = std::move(data), get_ms] {
++    std::thread([this] {
++      auto get_start = std::chrono::steady_clock::now();
++      std::vector<uint8_t> data = plume::GetVulkanPipelineCacheData(device_.get());
++      double get_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - get_start).count();
++      if (data.empty()) {
++        cache_writing_ = false;
++        return;
++      }
+       auto start = std::chrono::steady_clock::now();
+       std::error_code ec;
+       std::filesystem::create_directories(PipelineCachePath().parent_path(), ec);
