@@ -1,0 +1,30 @@
+--- a/gtav/src/native/menu.cpp
++++ b/gtav/src/native/menu.cpp
+@@ -114,7 +114,13 @@
+ // flickering while driving); 2 flickered. 4 is ~10% faster on Windows (88 -> 98 fps running
+ // around, 10-29) and no worse than 6 in a headless flicker-catch A/B; not yet checked driving.
+ constexpr const char* kSafeGpuLag = "6";
++#if GTAV_MENU_PHONE
++// Gtavport: 4 was never checked while driving, and the Odin 2 showed the ground flickering with it (17/11);
++// on the phone both presets keep the tested 6 (no extra GPU or CPU work, ~2 ms more latency).
++constexpr const char* kFastGpuLag = "6";
++#else
+ constexpr const char* kFastGpuLag = "4";
++#endif
+ 
+ void ApplyPreset(bool best) {
+ #ifdef __ANDROID__
+@@ -561,6 +567,13 @@
+       continue;
+     if (rex::cvar::SetFlagByName(name, value)) REXLOG_INFO("[native] setting {} = {} (gtav_settings.ini)", name, value);
+   }
++#if GTAV_MENU_PHONE
++  // Gtavport: a 4 saved by the old "Max performance" preset goes up to the tested 6 (see kFastGpuLag).
++  if (std::atoi(rex::cvar::GetFlagByName("gpu_skip_rendering_lag_ms").c_str()) < std::atoi(kSafeGpuLag)) {
++    rex::cvar::SetFlagByName("gpu_skip_rendering_lag_ms", kSafeGpuLag);
++    REXLOG_INFO("[native] gpu_skip_rendering_lag_ms raised to {} (phone minimum)", kSafeGpuLag);
++  }
++#endif
+ }
+ 
+ void SetNotice(const std::string& text, double seconds) {

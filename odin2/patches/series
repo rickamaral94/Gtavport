@@ -58,3 +58,5 @@ gtav        0056-texturas-com-sinal.patch
 gtav        0057-formatos-de-vertice-com-sinal-e-11-11-10.patch
 gtav        0058-teste-b-nao-fica-salvo-no-celular.patch
 gtav        0059-thread-principal-volta-ao-prime.patch
+gtav        0060-vies-de-profundidade-na-escala.patch
+gtav        0061-atraso-da-gpu-minimo-6-no-celular.patch

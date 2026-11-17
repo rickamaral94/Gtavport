@@ -1,9 +1,11 @@
 > [!WARNING]
 > **Pré-release de teste: v0.4.9.**
-> - **Chão piscando, testes ao vivo** (Select + R1 > Performance > Caçar shader): **Teste D** põe a GPU emulada
->   6 ms atrás do jogo em vez de 4 (o valor que acabou com a vegetação piscando no upstream) e **Teste E**
->   multiplica por 4 o viés de profundidade dos decalques do chão (z-fighting). O que fizer o chão parar de piscar
->   vira o padrão na próxima versão.
+> - **Chão piscando (z-fighting):** a parte "por inclinação" do viés de profundidade é medida por pixel e não era
+>   ajustada à escala de renderização: em 1080p (escala 1,5) as marcas sobre o chão (trilhas na neve, pintura da
+>   estrada) recebiam 2/3 da separação que o jogo pede e brigavam com o terreno. Agora é multiplicada pela escala,
+>   como o caminho Vulkan do SDK já fazia.
+> - **Atraso da GPU emulada mínimo de 6 ms no celular:** o valor medido pelo upstream contra o pisca-pisca; o 4
+>   do preset "Máximo desempenho" nunca foi testado andando. Não custa GPU nem CPU (~2 ms a mais de latência).
 > - Da v0.4.8: a thread principal volta ao núcleo prime quando o Android a tira de lá (confirmado no Odin: o
 >   Android liberou os 8 núcleos várias vezes na sessão e o jogo refixou).
 >
