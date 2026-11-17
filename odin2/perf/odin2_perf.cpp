@@ -84,7 +84,7 @@ uint64_t g_rec_first = 0, g_rec_written = 0;
 std::string g_rec_base, g_last_summary;
 std::deque<std::string> g_csv_pending;  // linhas prontas para a thread de E/S
 std::chrono::steady_clock::time_point g_rec_start;
-double g_head_start = -1, g_head_max = -1, g_mhz_start = -1, g_mhz_min = 1e9;
+double g_head_start = -1, g_head_max = -1, g_mhz_start = -1, g_mhz_min = 1e9, g_temp_max = -1;
 double g_cap_target_ms = 0;
 
 std::thread g_thread;
@@ -386,8 +386,16 @@ std::string Summary(const std::vector<Frame>& v, double secs, double cap_ms) {
                 Fmt(g_head_start, "", 2).c_str(), Fmt(g_head_max, "", 2).c_str(), Fmt(g_mhz_start, " MHz", 0).c_str(),
                 Fmt(g_mhz_min < 1e9 ? g_mhz_min : -1, " MHz", 0).c_str(), Fmt(g_gpu_mhz_max > 0 ? g_gpu_mhz_max : -1, " MHz", 0).c_str());
   o += b;
-  if (g_mhz_min < 1e9 && g_gpu_mhz_max > 0 && g_mhz_min < 0.7 * g_gpu_mhz_max)
-    o += "  ATENÇÃO: clock da GPU caiu abaixo de 70 % do máximo: throttling térmico provável.\n";
+  if (g_mhz_min < 1e9 && g_gpu_mhz_max > 0 && g_mhz_min < 0.7 * g_gpu_mhz_max) {
+    // Com limite de fps a GPU sobra e o governador baixa o clock sozinho (17/11: 401 MHz a 43-62 °C, 30 fps):
+    // só é aquecimento quando a temperatura também subiu.
+    std::snprintf(b, sizeof b, "  clock da GPU caiu abaixo de 70 %% do máximo (temperatura máx. %s): %s\n",
+                  Fmt(g_temp_max, " °C", 0).c_str(),
+                  g_temp_max >= 75 ? "ATENÇÃO, throttling térmico provável."
+                  : g_temp_max >= 0 ? "temperatura baixa, é o governador poupando energia (GPU com folga), não aquecimento."
+                                    : "sem temperatura para separar aquecimento de economia de energia.");
+    o += b;
+  }
   if (g_head_max >= 0.85) o += "  ATENÇÃO: margem térmica chegou a >= 0,85 (perto do limite do sistema).\n";
   if (!g_passes.empty()) {
     std::snprintf(b, sizeof b, "\nGPU por tipo de passe (últimos 300 quadros, total %.2f ms):\n", g_passes_total);
@@ -425,6 +433,7 @@ void StartRecording() {  // com g_mutex
   g_head_max = g_sensors.headroom;
   g_mhz_start = g_sensors.gpu_mhz;
   g_mhz_min = g_sensors.gpu_mhz > 0 ? g_sensors.gpu_mhz : 1e9;
+  g_temp_max = g_sensors.gpu_temp;
   g_cap_target_ms = CapTargetMs();
   g_csv_pending.clear();
   g_csv_pending.push_back(kCsvHeader);
@@ -494,6 +503,7 @@ void IoLoop() {
       if (g_recording) {
         if (s.headroom > g_head_max) g_head_max = s.headroom;
         if (s.gpu_mhz > 0 && s.gpu_mhz < g_mhz_min) g_mhz_min = s.gpu_mhz;
+        if (s.gpu_temp > g_temp_max) g_temp_max = s.gpu_temp;
         // Quadros cujo tempo de GPU já chegou viram linhas do CSV.
         uint64_t ready = g_seq > kGpuLag ? g_seq - kGpuLag : 0;
         for (uint64_t q = std::max(g_rec_written + 1, g_rec_first); q <= ready; q++) {

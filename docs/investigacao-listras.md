@@ -71,3 +71,10 @@ O teste A decide entre A e C. O B fecha a possibilidade de dados velhos. Os dois
 
 As duas de baixo custo que ajudam a validar esta rodada (testes A/B ao vivo e Caçar shader) já entraram
 (commits `8acd2c7`, `8931e4c`).
+
+## Resultado (v0.4.7, 17/11 13:44)
+
+**Corrigido.** Com a v0.4.7 as listras sumiram (prints 13:53 e 13:54, pilar e troncos do cemitério). O censo `[vtx]`
+mostra o único tipo corrigido em uso nessa rota: **HEND3N (0x2A2190) como NORMAL0**. A normal 11:11:10 lida como
+10:10:10:2 saía torta; shaders que projetam a textura pela normal (neve, terreno) esticavam a textura num eixo.
+Nenhum tipo ficou de fora da tabela.
