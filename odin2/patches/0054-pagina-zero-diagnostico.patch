@@ -1,0 +1,38 @@
+--- a/src/system/xmemory.cpp
++++ b/src/system/xmemory.cpp
+@@ -10,6 +10,7 @@
+  */
+ 
+ #include <algorithm>
++#include <cstdlib>
+ #include <cstring>
+ #include <utility>
+ 
+@@ -565,6 +566,27 @@
+   }
+   uint32_t virtual_address = HostToGuestVirtual(host_address);
+   BaseHeap* heap = LookupHeap(virtual_address);
++  // Gtavport: GTAVPORT_NULL_PAGE=1 (Driver gráfico > Variáveis) turns an access to the protected zero
++  // page (guest 0x0000-0xFFFF) into a logged, recoverable one: the page becomes read/write and the
++  // instruction is retried. Diagnostic for the pause-menu crash (a write of guest 0x00000000 from the
++  // D3D code at 0x8360Cxxx, 3 of 3 crashes on the Odin 2): logs who wrote, keeps the game running.
++  if (virtual_address < 0x10000) {
++    const char* null_page = std::getenv("GTAVPORT_NULL_PAGE");  // (no static: keeps the export list)
++    if (null_page && null_page[0] == '1') {
++      const auto* ts = runtime::ThreadState::Get();
++      const auto* ctx = ts ? ts->context() : nullptr;
++      // (snprintf + "{}" with a std::string: no new fmt instantiation, so the runtime's export list and
++      // the game ABI key stay the same.)
++      char msg[256];
++      std::snprintf(msg, sizeof msg,
++                    "[null-page] %s of guest 0x%08X: guest lr 0x%08X sp 0x%08X r3 0x%08X r31 0x%08X; zero page now "
++                    "read/write, continuing",
++                    is_write ? "write" : "read", virtual_address, ctx ? uint32_t(ctx->lr) : 0u, ctx ? ctx->r1.u32 : 0u,
++                    ctx ? ctx->r3.u32 : 0u, ctx ? ctx->r31.u32 : 0u);
++      REXSYS_WARN("{}", std::string(msg));
++      if (rex::memory::Protect(virtual_membase_, 0x10000, rex::memory::PageAccess::kReadWrite, nullptr)) return true;
++    }
++  }
+   if (!heap || heap->heap_type() != memory::HeapType::kGuestPhysical) {
+     REXSYS_ERROR(
+         "Unhandled guest access violation: {} of guest 0x{:08X} (host 0x{:016X}) on thread 0x{:X}",

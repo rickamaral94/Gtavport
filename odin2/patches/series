@@ -52,3 +52,4 @@ gtav        0050-ubo-indice-limitado.patch
 gtav        0051-conversor-sem-lock-nx2.patch
 rexglue-sdk 0052-objecttable-sem-lock-nx2.patch
 gtav        0053-censo-do-g-buffer.patch
+rexglue-sdk 0054-pagina-zero-diagnostico.patch
