@@ -1,12 +1,11 @@
 > [!WARNING]
-> **Pré-release de teste: v0.4.8.**
-> - **Thread principal no núcleo certo:** o jogo fixa a thread principal no núcleo mais rápido (prime), mas o
->   Android desfaz isso quando o app muda de grupo (print, cortina de notificações, menu). Numa sessão de 13 min
->   ela rodou 72 % do tempo nos núcleos médios. Agora a afinidade é conferida a cada 250 ms e refeita (linhas
->   `[android] ... pinned again` no `gtav.log`). Sem overclock: só o núcleo que o jogo já pedia.
-> - **Relatório de desempenho:** clock da GPU baixo com temperatura baixa (limite de 30 fps) não é mais
->   chamado de throttling térmico; é o governador economizando energia.
-> - Da v0.4.7: formatos de vértice corrigidos (listras e normais), Teste B não fica salvo.
+> **Pré-release de teste: v0.4.9.**
+> - **Chão piscando, testes ao vivo** (Select + R1 > Performance > Caçar shader): **Teste D** põe a GPU emulada
+>   6 ms atrás do jogo em vez de 4 (o valor que acabou com a vegetação piscando no upstream) e **Teste E**
+>   multiplica por 4 o viés de profundidade dos decalques do chão (z-fighting). O que fizer o chão parar de piscar
+>   vira o padrão na próxima versão.
+> - Da v0.4.8: a thread principal volta ao núcleo prime quando o Android a tira de lá (confirmado no Odin: o
+>   Android liberou os 8 núcleos várias vezes na sessão e o jogo refixou).
 >
 > Instala por cima sem perder saves; vindo da v0.4.2 ou mais nova, não precisa recompilar o jogo.
 
