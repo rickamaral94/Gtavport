@@ -12,13 +12,13 @@
    }
    uint32_t virtual_address = HostToGuestVirtual(host_address);
    BaseHeap* heap = LookupHeap(virtual_address);
-+  // Gtavport: GTAVPORT_NULL_PAGE=1 (Driver gráfico > Variáveis) turns an access to the protected zero
++  // Gtavport (on by default, GTAVPORT_NULL_PAGE=0 turns it off) turns an access to the protected zero
 +  // page (guest 0x0000-0xFFFF) into a logged, recoverable one: the page becomes read/write and the
 +  // instruction is retried. Diagnostic for the pause-menu crash (a write of guest 0x00000000 from the
 +  // D3D code at 0x8360Cxxx, 3 of 3 crashes on the Odin 2): logs who wrote, keeps the game running.
 +  if (virtual_address < 0x10000) {
 +    const char* null_page = std::getenv("GTAVPORT_NULL_PAGE");  // (no static: keeps the export list)
-+    if (null_page && null_page[0] == '1') {
++    if (!(null_page && null_page[0] == '0')) {  // on by default since v0.4.6; "0" turns it off
 +      const auto* ts = runtime::ThreadState::Get();
 +      const auto* ctx = ts ? ts->context() : nullptr;
 +      // (snprintf + "{}" with a std::string: no new fmt instantiation, so the runtime's export list and

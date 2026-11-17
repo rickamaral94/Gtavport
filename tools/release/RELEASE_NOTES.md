@@ -1,12 +1,14 @@
 > [!WARNING]
-> **Pré-release de teste: v0.4.5.**
-> - **Diagnóstico do crash ao apertar Start** (menu de pausa do GTA V). Com `GTAVPORT_NULL_PAGE=1` em
->   **Driver gráfico > Variáveis**, o acesso do jogo ao endereço 0, que hoje fecha o jogo, passa a ser registrado
->   no `gtav.log` (linhas `[null-page]`) e o jogo continua. Sem a variável, nada muda.
-> - Inclui tudo da v0.4.4: em **Back + RB > Performance > Caçar shader**, os testes A/B de textura e a caça de
->   shader para as listras perto da câmera.
+> **Pré-release de teste: v0.4.6.**
+> - **Start / pausa:** o contorno do acesso ao endereço 0 (que fechava o jogo ao abrir a pausa) agora vem
+>   **ligado por padrão**. Cada ocorrência fica no `gtav.log` (`[null-page]`); `GTAVPORT_NULL_PAGE=0` desliga.
+> - **Tela cheia:** depois de um print ou da cortina de notificações, o jogo volta a esconder as barras do Android.
+> - **Shaders no carregamento:** depois de uma atualização, os shaders a refazer são traduzidos já nas telas de
+>   carregamento, em vez de travar o começo do jogo.
+> - **Texturas com sinal:** texturas marcadas como "signed" no Xbox 360 eram lidas como 0..1; agora -1..1. É a
+>   suspeita para os vértices estourados de carros batidos (a confirmar).
 >
-> Instala por cima sem perder saves. Se você vem da v0.4.2 ou mais nova, não precisa recompilar o jogo.
+> Instala por cima sem perder saves; vindo da v0.4.2 ou mais nova, não precisa recompilar o jogo.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.
