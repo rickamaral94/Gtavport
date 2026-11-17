@@ -53,3 +53,5 @@ gtav        0051-conversor-sem-lock-nx2.patch
 rexglue-sdk 0052-objecttable-sem-lock-nx2.patch
 gtav        0053-censo-do-g-buffer.patch
 rexglue-sdk 0054-pagina-zero-diagnostico.patch
+gtav        0055-tela-cheia-e-shaders-no-carregamento.patch
+gtav        0056-texturas-com-sinal.patch

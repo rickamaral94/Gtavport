@@ -1,0 +1,31 @@
+--- a/gtav/src/native/textures.cpp
++++ b/gtav/src/native/textures.cpp
+@@ -436,6 +436,28 @@
+   if (!rex::graphics::TextureInfo::Prepare(fetch, &info)) return false;
+   HostFormat host;
+   if (!GetHostFormat(info.format, &host)) return false;
++  // Gtavport: the fetch constant's per-component sign. kSigned is two's complement data that the Xenos
++  // returns as -1..1; sampled as UNORM, -1 came back as ~+1 (a small negative offset became a large
++  // positive one). When every component of a directly copied 8- or 16-bit format is signed, the host
++  // texture is the SNORM format of the same bits. (Biased, gamma and block-compressed formats: not yet.)
++  if (host.convert == Convert::kNone) {
++    using TS = xenos::TextureSign;
++    const TS sx = fetch.sign_x, sy = fetch.sign_y, sz = fetch.sign_z, sw = fetch.sign_w;
++    auto all = [&](int n) {
++      return sx == TS::kSigned && (n < 2 || sy == TS::kSigned) && (n < 3 || (sz == TS::kSigned && sw == TS::kSigned));
++    };
++    RenderFormat snorm = RenderFormat::UNKNOWN;
++    switch (host.format) {
++      case RenderFormat::R8_UNORM: if (all(1)) snorm = RenderFormat::R8_SNORM; break;
++      case RenderFormat::R8G8_UNORM: if (all(2)) snorm = RenderFormat::R8G8_SNORM; break;
++      case RenderFormat::R8G8B8A8_UNORM: if (all(4)) snorm = RenderFormat::R8G8B8A8_SNORM; break;
++      case RenderFormat::R16_UNORM: if (all(1)) snorm = RenderFormat::R16_SNORM; break;
++      case RenderFormat::R16G16_UNORM: if (all(2)) snorm = RenderFormat::R16G16_SNORM; break;
++      case RenderFormat::R16G16B16A16_UNORM: if (all(4)) snorm = RenderFormat::R16G16B16A16_SNORM; break;
++      default: break;
++    }
++    if (snorm != RenderFormat::UNKNOWN) host.format = snorm;
++  }
+   if (info.dimension == xenos::DataDimension::k3D) return Decode3D(info, host, fetch.swizzle, out);
+   if (info.dimension != xenos::DataDimension::k2DOrStacked || info.is_stacked || info.width >= 8192 ||
+       info.height >= 8192 || info.memory.base_address == 0 || info.memory.base_size == 0 ||
