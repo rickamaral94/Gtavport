@@ -871,6 +871,24 @@ void DiagHuntMenu(float ui) {
       rex::cvar::SetFlagByName("gtav_native_legacy_vertex_formats", legacy ? "true" : "false");
       REXLOG_INFO("[hunt] legacy_vertex_formats = {}", legacy);
     }
+    // Chão piscando (v0.4.9). Teste D: o processador de comandos 6 ms atrás do jogo em vez de 4 (o upstream mediu
+    // que 6 acabou com a vegetação piscando; 4 nunca foi testado dirigindo). Teste E: o viés de profundidade dos
+    // decalques do chão (polygon offset) x4: se o piscar some, é z-fighting entre o terreno e o que vai por cima.
+    {
+      const int lag = std::atoi(rex::cvar::GetFlagByName("gpu_skip_rendering_lag_ms").c_str());
+      bool lag6 = lag >= 6;
+      if (ImGui::Checkbox("Teste D: atraso da GPU 6 ms (em vez de 4)", &lag6)) {
+        rex::cvar::SetFlagByName("gpu_skip_rendering_lag_ms", lag6 ? "6" : "4");
+        REXLOG_INFO("[hunt] gpu_skip_rendering_lag_ms = {}", lag6 ? 6 : 4);
+      }
+      const double bias = std::atof(rex::cvar::GetFlagByName("gtav_native_depth_bias_scale").c_str());
+      bool bias4 = bias > 1.5;
+      if (ImGui::Checkbox("Teste E: viés de profundidade x4 (decalques no chão)", &bias4)) {
+        rex::cvar::SetFlagByName("gtav_native_depth_bias_scale", bias4 ? "4" : "1");
+        rex::cvar::SetFlagByName("gtav_native_depth_slope_scale", bias4 ? "4" : "1");
+        REXLOG_INFO("[hunt] depth_bias_scale = {}", bias4 ? 4 : 1);
+      }
+    }
   }
   const bool on = g_census_on.load();
   if (!on) {
