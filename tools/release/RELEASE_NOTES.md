@@ -1,12 +1,12 @@
 > [!WARNING]
-> **Pré-release de teste: v0.4.7.**
-> - **Formatos de vértice:** a tabela que converte os vértices do Xbox 360 lia tipos com sinal como sem sinal
->   (BYTE4, BYTE4N), os 11:11:10 (HEND3/HEND3N) como 10:10:10:2 e o UDEC3 como normalizado, e deixava de fora
->   tipos que ela não conhecia (o shader recebia 0). Corrigido. É a suspeita para os vértices estourados de carros
->   batidos e para as listras de perto (os testes A e B da v0.4.6 descartaram textura). O `gtav.log` agora lista
->   cada tipo usado (linhas `[vtx]`); "Teste C" no menu Caçar shader volta à tabela antiga para comparar.
-> - **Desempenho:** o "Teste B" (conferir texturas e buffers inteiros) ficava salvo e ligado nas sessões seguintes,
->   custando 3 a 6 ms por quadro na thread de render. No celular ele não é mais salvo.
+> **Pré-release de teste: v0.4.8.**
+> - **Thread principal no núcleo certo:** o jogo fixa a thread principal no núcleo mais rápido (prime), mas o
+>   Android desfaz isso quando o app muda de grupo (print, cortina de notificações, menu). Numa sessão de 13 min
+>   ela rodou 72 % do tempo nos núcleos médios. Agora a afinidade é conferida a cada 250 ms e refeita (linhas
+>   `[android] ... pinned again` no `gtav.log`). Sem overclock: só o núcleo que o jogo já pedia.
+> - **Relatório de desempenho:** clock da GPU baixo com temperatura baixa (limite de 30 fps) não é mais
+>   chamado de throttling térmico; é o governador economizando energia.
+> - Da v0.4.7: formatos de vértice corrigidos (listras e normais), Teste B não fica salvo.
 >
 > Instala por cima sem perder saves; vindo da v0.4.2 ou mais nova, não precisa recompilar o jogo.
 
