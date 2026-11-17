@@ -21,6 +21,27 @@ Alvo: AYN Odin 2 Portal Pro (Adreno 740), sem root.
 | Resolução 1080p | Rick: "já existia antes", nas versões 0.2.x a 720p/0.75 | **não é escala** |
 | Filtro anisotrópico | anisotropia 1 (rodada de 16/11, 05:11) | listras continuam |
 | UBO lido fora do bloco (a0 negativo) | v0.4.2 com o clamp 0050, 2670 shaders retraduzidos (17/11) | listras continuam |
+| A: mip 0 corrompido | v0.4.6, `texture_min_lod=1` ligado ao vivo às 11:32:59 (17/11); prints 11:35 e 11:37 | listras continuam (estrada de LS, pilar) |
+| B: dados desatualizados | v0.4.6, `exact_cache` ligado a sessão inteira (vinha do gtav_settings.ini) | listras continuam |
+
+## Rodada de 17/11 (v0.4.6): A e B descartados, suspeita nos formatos de vértice
+
+Com A e B descartados, sobra a hipótese C (coordenada/geometria). Lendo `vertex_layout.h` contra os valores
+D3DDECLTYPE do XDK (6 bits baixos = formato Xenos, bit 8 = com sinal, bit 9 = inteiro), a tabela tinha erros:
+
+| Valor | Tipo XDK | Como era lido | Correto |
+|---|---|---|---|
+| 0x1A2386 | BYTE4 | inteiro sem sinal | inteiro com sinal |
+| 0x1A2186 | BYTE4N | UNORM (0..1) | SNORM (-1..1) |
+| 0x2A2190 | HEND3N | 10:10:10:2 com sinal | 11:11:10 (x 11 bits a partir do bit 0), com sinal, normalizado |
+| 0x2A2390 | HEND3 | 10:10:10:2 com sinal, normalizado | 11:11:10 inteiro com sinal |
+| 0x2A2287 | UDEC3 | normalizado | inteiro (0..1023) |
+| USHORT2/4, DEC3/4, UDEC4, UDEC3N/4N, (U)HEND3, DHEN3*, INT*/UINT* | (fora da tabela) | elemento descartado, o shader lia 0 | convertidos |
+
+Os campos de 10_11_11 e 11_11_10 seguem o interpretador de shaders do SDK (`interpreter.cpp`). Patch 0057;
+"Teste C" no menu volta à tabela antiga ao vivo, e o log lista cada tipo usado (`[vtx]`). Um valor com sinal lido
+como sem sinal vira um número grande e positivo: é o padrão dos vértices estourados de carros batidos, e um
+componente de UV lido como 0 dá exatamente a textura esticada num eixo. Ainda é hipótese até o teste no Odin.
 
 ## Hipóteses que restam e o teste que separa cada uma
 

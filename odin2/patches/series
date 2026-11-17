@@ -55,3 +55,5 @@ gtav        0053-censo-do-g-buffer.patch
 rexglue-sdk 0054-pagina-zero-diagnostico.patch
 gtav        0055-tela-cheia-e-shaders-no-carregamento.patch
 gtav        0056-texturas-com-sinal.patch
+gtav        0057-formatos-de-vertice-com-sinal-e-11-11-10.patch
+gtav        0058-teste-b-nao-fica-salvo-no-celular.patch

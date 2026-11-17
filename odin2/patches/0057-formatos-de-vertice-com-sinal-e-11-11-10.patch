@@ -1,0 +1,211 @@
+--- a/gtav/src/native/vertex_layout.h
++++ b/gtav/src/native/vertex_layout.h
+@@ -24,6 +24,18 @@
+   kUDec3 = 0x2A2287, kDec3N = 0x2A2187, kDec4N = 0x1A2187, kDec3N_2 = 0x2A2190,
+   kDec3N_3 = 0x2A2390, kFloat16_2 = 0x2C235F, kFloat16_4 = 0x1A2360, kUnused = 0xFFFFFFFF,
+ };
++// Gtavport: the XDK's names for the values above, and the ones the table lacked. The low 6 bits are the
++// Xenos vertex format (6 = 8_8_8_8, 7 = 2_10_10_10, 16 = 10_11_11, 17 = 11_11_10, 25 = 16_16, ...), bit 8
++// is "signed" and bit 9 "integer" (not normalized): kUByte4_2 (0x1A2386) is BYTE4, kUByte4N_2 (0x1A2186)
++// BYTE4N, kDec3N_2 (0x2A2190) HEND3N and kDec3N_3 (0x2A2390) HEND3, whose 11:11:10 bits were read as
++// 10:10:10:2, and kUDec3 (0x2A2287) is not normalized.
++enum : uint32_t {
++  kByte4 = 0x1A2386, kByte4N = 0x1A2186, kUShort2 = 0x2C2259, kUShort4 = 0x1A225A,
++  kDec3 = 0x2A2387, kUDec3N = 0x2A2087, kUDec4 = 0x1A2287, kDec4 = 0x1A2387, kUDec4N = 0x1A2087,
++  kUHend3 = 0x2A2290, kHend3 = 0x2A2390, kUHend3N = 0x2A2090, kHend3N = 0x2A2190,
++  kUDhen3 = 0x2A2291, kDhen3 = 0x2A2391, kUDhen3N = 0x2A2091, kDhen3N = 0x2A2191,
++  kInt1 = 0x2C83A1, kInt2 = 0x2C23A2, kInt4 = 0x1A23A3, kUInt2 = 0x2C22A2, kUInt4 = 0x1A22A3,
++};
+ 
+ // D3DDECLUSAGE
+ enum : uint8_t {
+@@ -42,10 +54,61 @@
+   // converted to float32 on upload (int_bits = 8/16/32 per component, int_count components).
+   uint32_t int_bits = 0, int_count = 0;
+   bool int_signed = false;
++  // Gtavport: packed 32-bit formats read field by field into float32 x4 (R32G32B32A32_FLOAT): pk_format
++  // is the Xenos vertex format (7, 16 or 17), pk_norm divides by the largest code, pk_signed sign-extends.
++  uint32_t pk_format = 0;
++  bool pk_norm = false, pk_signed = false;
+ };
+ 
++// Gtavport: fields of a packed vertex format, as the SDK's shader interpreter reads them (component x in
++// the low bits): 2_10_10_10 = 10/10/10/2, 10_11_11 = 11/11/10, 11_11_10 = 10/11/11.
++inline uint32_t PackedFields(uint32_t format, uint32_t widths[4], uint32_t offsets[4]) {
++  switch (format) {
++    case 7: widths[0] = widths[1] = widths[2] = 10, widths[3] = 2, offsets[0] = 0, offsets[1] = 10, offsets[2] = 20, offsets[3] = 30; return 4;
++    case 16: widths[0] = widths[1] = 11, widths[2] = 10, offsets[0] = 0, offsets[1] = 11, offsets[2] = 22; return 3;
++    case 17: widths[0] = 10, widths[1] = widths[2] = 11, offsets[0] = 0, offsets[1] = 10, offsets[2] = 21; return 3;
++    default: return 0;
++  }
++}
++
++// Gtavport: --gtav_native_legacy_vertex_formats restores the upstream table (A/B of the fixes below).
++inline bool g_legacy_vertex_formats = false;
++
+ inline bool Lookup(uint32_t type, TypeInfo* out) {
+   using F = plume::RenderFormat;
++  if (!g_legacy_vertex_formats) {
++    auto packed = [&](uint32_t format, bool norm, bool sgn) {
++      *out = {4, 4, F::R32G32B32A32_FLOAT, 16};
++      out->pk_format = format, out->pk_norm = norm, out->pk_signed = sgn;
++      return true;
++    };
++    switch (type) {
++      case kByte4: *out = {4, 4, F::R32G32B32A32_FLOAT, 16, false, false, 8, 4, true}; return true;
++      case kByte4N: *out = {4, 4, F::R8G8B8A8_SNORM, 4}; return true;
++      case kUShort2: *out = {4, 2, F::R32G32_FLOAT, 8, false, false, 16, 2, false}; return true;
++      case kUShort4: *out = {8, 2, F::R32G32B32A32_FLOAT, 16, false, false, 16, 4, false}; return true;
++      case kInt1: *out = {4, 4, F::R32_FLOAT, 4, false, false, 32, 1, true}; return true;
++      case kInt2: *out = {8, 4, F::R32G32_FLOAT, 8, false, false, 32, 2, true}; return true;
++      case kInt4: *out = {16, 4, F::R32G32B32A32_FLOAT, 16, false, false, 32, 4, true}; return true;
++      case kUInt2: *out = {8, 4, F::R32G32_FLOAT, 8, false, false, 32, 2, false}; return true;
++      case kUInt4: *out = {16, 4, F::R32G32B32A32_FLOAT, 16, false, false, 32, 4, false}; return true;
++      case kUDec3:
++      case kUDec4: return packed(7, false, false);
++      case kDec3:
++      case kDec4: return packed(7, false, true);
++      case kUDec3N:
++      case kUDec4N: *out = {4, 4, F::R16G16B16A16_UNORM, 8, true, false}; return true;
++      case kUHend3: return packed(16, false, false);
++      case kHend3: return packed(16, false, true);
++      case kUHend3N: return packed(16, true, false);
++      case kHend3N: return packed(16, true, true);
++      case kUDhen3: return packed(17, false, false);
++      case kDhen3: return packed(17, false, true);
++      case kUDhen3N: return packed(17, true, false);
++      case kDhen3N: return packed(17, true, true);
++      default: break;
++    }
++  }
+   switch (type) {
+     case kFloat1: *out = {4, 4, F::R32_FLOAT, 4}; return true;
+     case kFloat2: *out = {8, 4, F::R32G32_FLOAT, 8}; return true;
+@@ -115,6 +178,10 @@
+   TypeInfo info[kMaxVertexElements] = {};
+   uint32_t host_stride[kMaxStreams] = {};
+   bool stream_used[kMaxStreams] = {};
++  // Gtavport: elements left out (type not in the table, or no input location), for the log.
++  uint32_t skipped = 0;
++  uint32_t skipped_type[kMaxVertexElements] = {};
++  uint8_t skipped_usage[kMaxVertexElements] = {}, skipped_index[kMaxVertexElements] = {};
+ };
+ 
+ inline void Build(const DrawCommand& d, HostLayout* out) {
+@@ -123,7 +190,14 @@
+     const VertexElement& e = d.elements[i];
+     TypeInfo info;
+     uint32_t location = Location(e.usage, e.usage_index);
+-    if (e.stream >= kMaxStreams || !Lookup(e.type, &info) || location == ~0u) continue;
++    if (e.stream >= kMaxStreams || !Lookup(e.type, &info) || location == ~0u) {
++      if (e.type != kUnused) {
++        out->skipped_type[out->skipped] = e.type;
++        out->skipped_usage[out->skipped] = e.usage;
++        out->skipped_index[out->skipped++] = e.usage_index;
++      }
++      continue;
++    }
+     uint32_t n = out->element_count++;
+     out->info[n] = info;
+     out->guest_index[n] = i;
+--- a/gtav/src/native/backend.cpp
++++ b/gtav/src/native/backend.cpp
+@@ -94,6 +94,10 @@
+ #endif
+ REXCVAR_DEFINE_INT32(gtav_native_texture_sample_frames, GTAV_TEXTURE_SAMPLE_FRAMES_DEFAULT, "GTAV",
+                      "Frames between the sampled checks of a large cached texture (1: every frame it is used)");
++// Gtavport: A/B of the vertex format fixes in vertex_layout.h (signed BYTE4/BYTE4N, 11:11:10 HEND3/DHEN3,
++// non-normalized UDEC3, the types the table lacked).
++REXCVAR_DEFINE_BOOL(gtav_native_legacy_vertex_formats, false, "GTAV",
++                    "Use the upstream vertex format table (before the Gtavport fixes of signed and 11:11:10 types)");
+ REXCVAR_DEFINE_BOOL(gtav_native_exact_cache, false, "GTAV",
+                     "Check cached vertex/index buffers and textures with a full content hash every frame "
+                     "(no sampled-hash shortcut for large ones)");
+@@ -407,18 +411,40 @@
+       for (uint32_t c = 0; c < n; c++) {
+         if (info.int_bits == 8) {
+           // UBYTE4: one big-endian 32-bit word with X in its low byte (last in memory).
+-          o[c] = float(src[3 - c]);
++          o[c] = info.int_signed ? float(int8_t(src[3 - c])) : float(src[3 - c]);  // Gtavport: BYTE4
+         } else if (info.int_bits == 16) {
+           uint16_t x = uint16_t(src[2 * c] << 8 | src[2 * c + 1]);
+           o[c] = info.int_signed ? float(int16_t(x)) : float(x);
+         } else {
+-          o[c] = float(be32(src + 4 * c));
++          o[c] = info.int_signed ? float(int32_t(be32(src + 4 * c))) : float(be32(src + 4 * c));
+         }
+       }
+       std::memcpy(dst, o, 4 * n);
+     }
+     return;
+   }
++  // Gtavport: packed 2_10_10_10 / 10_11_11 / 11_11_10 read field by field into float32 x4 (the
++  // components the format lacks are 0, w is 1), as the SDK's shader interpreter does.
++  if (info.pk_format) {
++    uint32_t widths[4] = {}, offsets[4] = {};
++    const uint32_t n = vertex_layout::PackedFields(info.pk_format, widths, offsets);
++    for (uint32_t v = 0; v < vertices; v++, src += stride, dst += host_stride) {
++      const uint32_t x = be32(src);
++      float o[4] = {0.0f, 0.0f, 0.0f, 1.0f};
++      for (uint32_t c = 0; c < n; c++) {
++        const uint32_t bits = widths[c], mask = (1u << bits) - 1;
++        const uint32_t q = (x >> offsets[c]) & mask;
++        if (info.pk_signed) {
++          const int32_t sq = int32_t(q ^ (1u << (bits - 1))) - int32_t(1u << (bits - 1));  // sign-extend
++          o[c] = info.pk_norm ? std::max(float(sq) / float((1u << (bits - 1)) - 1), -1.0f) : float(sq);
++        } else {
++          o[c] = info.pk_norm ? float(q) / float(mask) : float(q);
++        }
++      }
++      std::memcpy(dst, o, 16);
++    }
++    return;
++  }
+   if (info.dec) {
+     for (uint32_t v = 0; v < vertices; v++, src += stride, dst += host_stride) {
+       uint32_t x = be32(src);
+@@ -486,7 +512,7 @@
+   for (uint32_t n = 0; bulk && n < j.count; n++) {
+     const auto& e = j.elements[n];
+     const auto& info = e.info;
+-    bulk = !info.int_bits && !info.dec && (info.swap == 4 || info.swap == 2) &&
++    bulk = !info.int_bits && !info.dec && !info.pk_format && (info.swap == 4 || info.swap == 2) &&
+            info.guest_size == info.host_size && e.host_offset == e.guest_offset && e.guest_offset % 4 == 0 &&
+            info.guest_size % 4 == 0 && e.guest_offset + info.guest_size <= stride;
+     if (!bulk) break;
+@@ -3702,13 +3728,34 @@
+     uint64_t layout_hash = 0;
+     uint64_t stream_hash[kMaxStreams] = {};
+   } layout_memo;
++  // Gtavport: each (type, usage, index) seen, logged once: which XDK vertex types the game uses and for
++  // what, and the ones the table leaves out (the shader then reads 0 for that input).
++  std::unordered_set<uint64_t> vertex_types_seen;
+   const LayoutMemo& Layout(const DrawCommand& d) {
+     auto& m = layout_memo;
+-    if (m.count == d.element_count && std::memcmp(m.elements, d.elements, sizeof(VertexElement) * d.element_count) == 0)
++    const bool legacy = REXCVAR_GET(gtav_native_legacy_vertex_formats);
++    if (m.count == d.element_count && legacy == vertex_layout::g_legacy_vertex_formats &&
++        std::memcmp(m.elements, d.elements, sizeof(VertexElement) * d.element_count) == 0)
+       return m;
++    vertex_layout::g_legacy_vertex_formats = legacy;
+     m.count = d.element_count;
+     std::memcpy(m.elements, d.elements, sizeof(VertexElement) * d.element_count);
+     vertex_layout::Build(d, &m.vl);
++    for (uint32_t i = 0; i < d.element_count && vertex_types_seen.size() < 256; i++) {
++      const VertexElement& e = d.elements[i];
++      if (e.type == vertex_layout::kUnused) continue;
++      if (!vertex_types_seen.insert(uint64_t(e.type) << 16 | uint64_t(e.usage) << 8 | e.usage_index).second) continue;
++      bool skipped = false;
++      for (uint32_t k = 0; k < m.vl.skipped; k++)
++        skipped |= m.vl.skipped_type[k] == e.type && m.vl.skipped_usage[k] == e.usage && m.vl.skipped_index[k] == e.usage_index;
++      vertex_layout::TypeInfo info;
++      const bool known = vertex_layout::Lookup(e.type, &info);
++      REXLOG_INFO("[vtx] type {:06X} (format {}) as {}{} stream {} offset {}: {}", e.type, e.type & 0x3F,
++                  vertex_layout::Semantic(e.usage), e.usage_index, e.stream, e.offset,
++                  skipped ? (known ? "LEFT OUT (no input location)" : "LEFT OUT (type not in the table)")
++                          : fmt::format("host format {}{}", uint32_t(info.host),
++                                        info.pk_format ? " (packed, read per field)" : ""));
++    }
+     m.layout_hash = LayoutHash(m.vl);
+     for (uint32_t s = 0; s < kMaxStreams; s++)
+       m.stream_hash[s] = Hash(m.vl.elements, sizeof(RenderInputElement) * m.vl.element_count, s);

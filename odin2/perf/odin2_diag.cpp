@@ -863,6 +863,14 @@ void DiagHuntMenu(float ui) {
       rex::cvar::SetFlagByName("gtav_native_exact_cache", exact ? "true" : "false");
       REXLOG_INFO("[hunt] exact_cache = {}", exact);
     }
+    // Teste C (v0.4.7): a tabela de formatos de vértice antiga (BYTE4N lido como sem sinal, HEND3N 11:11:10
+    // lido como 10:10:10:2). Se o defeito volta com ela ligada, a correção dos formatos é o que o resolve.
+    const std::string lv = rex::cvar::GetFlagByName("gtav_native_legacy_vertex_formats");
+    bool legacy = lv == "true" || lv == "1";
+    if (ImGui::Checkbox("Teste C: formatos de vértice antigos (antes da v0.4.7)", &legacy)) {
+      rex::cvar::SetFlagByName("gtav_native_legacy_vertex_formats", legacy ? "true" : "false");
+      REXLOG_INFO("[hunt] legacy_vertex_formats = {}", legacy);
+    }
   }
   const bool on = g_census_on.load();
   if (!on) {
