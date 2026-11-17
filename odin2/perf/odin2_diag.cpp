@@ -848,6 +848,22 @@ void DiagHuntMenu(float ui) {
   ImGui::TextWrapped("Pare num ponto onde o defeito aparece. Comece o censo, feche o menu por alguns segundos, volte, "
                      "toque em Atualizar e use Anterior/Próximo: cada um desliga um pixel shader. Quando o defeito sumir "
                      "(a superfície some junto), anote o hash. Ele também fica no gtav.log (linhas [hunt]).");
+  // Testes rápidos que separam as hipóteses de um defeito de textura (valem na hora, sem reiniciar):
+  // mip 0 pulado -> o defeito está nos dados/decodificação do nível de maior resolução (só usado de perto);
+  // cache exato -> dados desatualizados (streaming conferido por amostragem no Android, sem write-watch).
+  {
+    bool skip_mip0 = std::atoi(rex::cvar::GetFlagByName("gtav_native_texture_min_lod").c_str()) > 0;
+    if (ImGui::Checkbox("Teste A: pular o mip 0 das texturas", &skip_mip0)) {
+      rex::cvar::SetFlagByName("gtav_native_texture_min_lod", skip_mip0 ? "1" : "0");
+      REXLOG_INFO("[hunt] texture_min_lod = {}", skip_mip0 ? 1 : 0);
+    }
+    const std::string ec = rex::cvar::GetFlagByName("gtav_native_exact_cache");
+    bool exact = ec == "true" || ec == "1";
+    if (ImGui::Checkbox("Teste B: conferir texturas e buffers inteiros todo quadro", &exact)) {
+      rex::cvar::SetFlagByName("gtav_native_exact_cache", exact ? "true" : "false");
+      REXLOG_INFO("[hunt] exact_cache = {}", exact);
+    }
+  }
   const bool on = g_census_on.load();
   if (!on) {
     ImGui::RadioButton("G-buffer (superfícies opacas)", &g_hunt_gbuffer, 1);
