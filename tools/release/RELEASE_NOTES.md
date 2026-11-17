@@ -1,13 +1,8 @@
 > [!WARNING]
-> **Pré-release de teste: v0.4.2.** Ganhos de CPU trazidos de outros ports, ainda por medir no Odin:
-> - **Do upstream (branch perf-linux):** a thread de render para menos e reaproveita constantes que não mudaram.
-> - **Do port do Switch 2 (gtav-recomp-nx2):**
->   - conversor de vértices sem trava (lá: -2,4 ms por quadro na thread de gravação);
->   - tabela de objetos do kernel sem trava nas buscas (lá a thread principal passava ~18% do tempo esperando nela);
->   - leituras de constantes indexadas limitadas à tabela (índice negativo lia fora do buffer).
->
-> **Recompile o jogo uma vez** quando o app pedir (a base do kernel mudou). Na primeira abertura, alguns shaders
-> são traduzidos de novo. Instala por cima sem perder saves.
+> **Pré-release de teste: v0.4.3.** Novo em **Start > Performance > Caçar shader**: lista os pixel shaders de
+> uma passada (G-buffer ou HDR) e desliga um por vez, ao vivo, mostrando o hash. Serve para achar o shader das
+> listras em superfícies perto da câmera. Inclui tudo da v0.4.2. Instala por cima sem perder saves; se você vem da
+> v0.4.2, não precisa recompilar o jogo.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.
