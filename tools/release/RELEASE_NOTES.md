@@ -1,5 +1,9 @@
 > [!WARNING]
-> **Pré-release de teste: v0.4.9.**
+> **Pré-release de teste: v0.4.10.**
+> - **Testes A/B/C saíram do menu Caçar shader.** Já cumpriram o papel; esquecidos ligados (sessão de 17/11 18:12)
+>   deixavam a imagem borrada, traziam as listras de volta e dobravam o tempo da thread de render.
+>
+> Da v0.4.9:
 > - **Chão piscando (z-fighting):** a parte "por inclinação" do viés de profundidade é medida por pixel e não era
 >   ajustada à escala de renderização: em 1080p (escala 1,5) as marcas sobre o chão (trilhas na neve, pintura da
 >   estrada) recebiam 2/3 da separação que o jogo pede e brigavam com o terreno. Agora é multiplicada pela escala,
