@@ -1,0 +1,14 @@
+--- a/gtav/src/native/menu.cpp
++++ b/gtav/src/native/menu.cpp
+@@ -71,7 +71,11 @@
+     "gtav_native_tile_penumbra_all",
+     "gtav_native_async_pipelines",
+     "gpu_skip_rendering_lag_ms",
++#if !GTAV_MENU_PHONE
++    // Gtavport: on the phone the full checks are a test (menu Performance > Caçar shader, Teste B) that
++    // costs 3-6 ms of the render thread a frame: not saved, so it does not stay on in later sessions.
+     "gtav_native_exact_cache",
++#endif
+     "gtav_native_texture_recheck_frames",
+     "gtav_touch_controls",
+ #if !GTAV_MENU_PHONE
