@@ -639,6 +639,7 @@ void BuildMenu(float ui) {
     }
     ImGui::TextDisabled("Feche o menu e jogue: começa após 5 s seguidos de jogo. Relatório em logs/perf (tela Logs\n"
                         "de desempenho do app) e no gtav.log, linhas [diag].");
+    DiagHuntMenu(ui);
     ImGui::Separator();
   }
   std::lock_guard lock(g_mutex);

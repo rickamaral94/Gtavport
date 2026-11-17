@@ -48,6 +48,7 @@ void DiagRequest(int seconds);           // menu do jogo
 void DiagCheckRequestFile();             // diag_request.txt deixado pela tela Configurações do app
 void DiagOnFrame(const FrameSample& s, bool menu_open);
 void DiagOnGpu(double gpu_ms);
+void DiagHuntMenu(float ui);                // menu Performance > Caçar shader
 void DiagNoteHdrDraw(uint64_t ps_hash);    // backend, com --gtav_native_hdr_census: draw no alvo HDR
 void DiagOnPasses(const std::vector<std::pair<std::string, double>>& passes, double total_ms);
 std::string DiagStatus();                // "" parado; senão a linha do aviso na tela

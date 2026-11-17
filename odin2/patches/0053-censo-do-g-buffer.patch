@@ -1,0 +1,28 @@
+--- a/gtav/src/native/backend.cpp
++++ b/gtav/src/native/backend.cpp
+@@ -232,6 +232,10 @@
+ // on the Odin 2. The diagnostic then turns those shaders off one at a time (--gtav_native_skip_ps).
+ REXCVAR_DEFINE_BOOL(gtav_native_hdr_census, false, "GTAV",
+                     "Diagnostic: count the pixel shaders drawn into the full-size HDR target (Medir desempenho)");
++// Gtavport (menu Performance > Caçar shader): the census counts the G-buffer pass instead (four colour
++// targets with depth, >= 640 wide), where opaque surfaces near the camera are drawn.
++REXCVAR_DEFINE_BOOL(gtav_native_census_gbuffer, false, "GTAV",
++                    "Diagnostic: the shader census counts the G-buffer pass (4 targets) instead of the HDR pass");
+ REXCVAR_DEFINE_INT32(gtav_native_coarse_shading, 0, "GTAV",
+                      "Native renderer: shade the 3D passes (full-size targets with depth) at a coarser rate, "
+                      "a cheaper stand-in for a lower resolution: 0 = every pixel, 1 = 2x1 pixels, 2 = 2x2 "
+@@ -4929,9 +4933,11 @@
+       ds.pipeline = pipeline;
+       ds.bias_set = false;  // pipelines without dynamic depth bias overwrite it
+     }
+-    if (REXCVAR_GET(gtav_native_hdr_census) && bound_depth && bound_color[0] && !bound_color[1] &&
+-        bound_color[0]->format == RenderFormat::R16G16B16A16_FLOAT && bound_color[0]->width >= 640)
+-      perf::DiagNoteHdrDraw(d.ps_hash);
++    if (REXCVAR_GET(gtav_native_hdr_census) && bound_depth && bound_color[0] && bound_color[0]->width >= 640) {
++      const bool hdr = !bound_color[1] && bound_color[0]->format == RenderFormat::R16G16B16A16_FLOAT;
++      const bool gbuffer = bound_color[3] != nullptr;
++      if (REXCVAR_GET(gtav_native_census_gbuffer) ? gbuffer : hdr) perf::DiagNoteHdrDraw(d.ps_hash);
++    }
+     if (PipelineStatsOn() && bound_depth && bound_color[0] && !bound_color[1] &&
+         bound_color[0]->format == RenderFormat::R16G16B16A16_FLOAT && bound_color[0]->width >= 640)
+       DumpPipelineStats(d.vs_hash, d.ps_hash, pipeline, pkey);

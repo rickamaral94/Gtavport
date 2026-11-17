@@ -27,6 +27,7 @@
 #include "paths.h"
 #include "shader_compiler.h"
 
+#include <imgui.h>
 #include <rex/cvar.h>
 #include <rex/logging.h>
 
@@ -821,6 +822,87 @@ void DiagOnFrame(const FrameSample& s, bool menu_open) {
   g_game_ms += s.interval_ms;
   if (g_game_ms >= g_seconds * 1000.0 || Clock::now() - g_rec_start > std::chrono::seconds(g_seconds * 3 + 30))
     g_state = State::kReporting;
+}
+
+// Menu Performance > Caçar shader: censo do G-buffer (ou do passe HDR) e um pixel shader desligado por vez, ao vivo
+// (--gtav_native_skip_ps), para achar o shader de um defeito de imagem olhando a tela.
+namespace {
+std::vector<std::pair<uint64_t, uint64_t>> g_hunt_list;
+int g_hunt_index = -1;  // -1: nenhum desligado
+int g_hunt_gbuffer = 1;  // 1: G-buffer, 0: passe HDR (RadioButton)
+double g_hunt_frames = 1;
+
+void HuntApply() {
+  char hex[20] = "";
+  if (g_hunt_index >= 0 && g_hunt_index < int(g_hunt_list.size()))
+    std::snprintf(hex, sizeof hex, "%016llX", static_cast<unsigned long long>(g_hunt_list[g_hunt_index].first));
+  rex::cvar::SetFlagByName("gtav_native_skip_ps", hex);
+  REXLOG_INFO("[hunt] {} ({} de {} no passe {})", hex[0] ? std::string("desligado ps ") + hex : std::string("nenhum desligado"),
+              g_hunt_index + 1, g_hunt_list.size(), g_hunt_gbuffer ? "G-buffer" : "HDR");
+}
+}  // namespace
+
+void DiagHuntMenu(float ui) {
+  (void)ui;
+  if (!ImGui::TreeNode("Caçar shader (listras e outros defeitos de imagem)")) return;
+  ImGui::TextWrapped("Pare num ponto onde o defeito aparece. Comece o censo, feche o menu por alguns segundos, volte, "
+                     "toque em Atualizar e use Anterior/Próximo: cada um desliga um pixel shader. Quando o defeito sumir "
+                     "(a superfície some junto), anote o hash. Ele também fica no gtav.log (linhas [hunt]).");
+  const bool on = g_census_on.load();
+  if (!on) {
+    ImGui::RadioButton("G-buffer (superfícies opacas)", &g_hunt_gbuffer, 1);
+    ImGui::SameLine();
+    ImGui::RadioButton("Passe HDR (luzes, céu)", &g_hunt_gbuffer, 0);
+    if (ImGui::Button("Começar censo")) {
+      {
+        std::lock_guard census(g_census_mutex);
+        g_census.clear();
+      }
+      g_census_frames = 0;
+      g_hunt_list.clear();
+      g_hunt_index = -1;
+      rex::cvar::SetFlagByName("gtav_native_census_gbuffer", g_hunt_gbuffer ? "true" : "false");
+      rex::cvar::SetFlagByName("gtav_native_hdr_census", "true");
+      g_census_on = true;
+    }
+  } else {
+    ImGui::Text("Censo do %s: %llu quadros de jogo contados", g_hunt_gbuffer ? "G-buffer" : "passe HDR",
+                static_cast<unsigned long long>(g_census_frames.load()));
+    if (ImGui::Button("Atualizar lista")) {
+      g_hunt_list = CensusSorted();
+      g_hunt_frames = double(std::max<uint64_t>(1, g_census_frames.load()));
+      g_hunt_index = -1;
+      HuntApply();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("< Anterior") && !g_hunt_list.empty()) {
+      g_hunt_index = g_hunt_index <= -1 ? int(g_hunt_list.size()) - 1 : g_hunt_index - 1;
+      HuntApply();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Próximo >") && !g_hunt_list.empty()) {
+      g_hunt_index = g_hunt_index + 1 >= int(g_hunt_list.size()) ? -1 : g_hunt_index + 1;
+      HuntApply();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Nenhum")) {
+      g_hunt_index = -1;
+      HuntApply();
+    }
+    if (g_hunt_index >= 0 && g_hunt_index < int(g_hunt_list.size()))
+      ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Desligado: ps %016llX (%d de %zu, %.1f draws/quadro)",
+                         static_cast<unsigned long long>(g_hunt_list[g_hunt_index].first), g_hunt_index + 1,
+                         g_hunt_list.size(), double(g_hunt_list[g_hunt_index].second) / g_hunt_frames);
+    else
+      ImGui::Text("Nenhum shader desligado (%zu na lista)", g_hunt_list.size());
+    if (ImGui::Button("Parar")) {
+      g_hunt_index = -1;
+      HuntApply();
+      rex::cvar::SetFlagByName("gtav_native_hdr_census", "false");
+      g_census_on = false;
+    }
+  }
+  ImGui::TreePop();
 }
 
 void DiagNoteHdrDraw(uint64_t ps_hash) {
