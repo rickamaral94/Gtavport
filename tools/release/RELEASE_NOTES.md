@@ -1,10 +1,12 @@
 > [!WARNING]
-> **Pré-release de teste: v0.4.4.** Novo em **Start > Performance > Caçar shader**: dois testes que valem na hora
-> (pular o mip 0 das texturas; conferir texturas e buffers inteiros todo quadro), para separar as causas das listras.
-> A ferramenta lista os pixel shaders de
-> uma passada (G-buffer ou HDR) e desliga um por vez, ao vivo, mostrando o hash. Serve para achar o shader das
-> listras em superfícies perto da câmera. Inclui tudo da v0.4.2. Instala por cima sem perder saves; se você vem da
-> v0.4.2 ou v0.4.3, não precisa recompilar o jogo.
+> **Pré-release de teste: v0.4.5.**
+> - **Diagnóstico do crash ao apertar Start** (menu de pausa do GTA V). Com `GTAVPORT_NULL_PAGE=1` em
+>   **Driver gráfico > Variáveis**, o acesso do jogo ao endereço 0, que hoje fecha o jogo, passa a ser registrado
+>   no `gtav.log` (linhas `[null-page]`) e o jogo continua. Sem a variável, nada muda.
+> - Inclui tudo da v0.4.4: em **Back + RB > Performance > Caçar shader**, os testes A/B de textura e a caça de
+>   shader para as listras perto da câmera.
+>
+> Instala por cima sem perder saves. Se você vem da v0.4.2 ou mais nova, não precisa recompilar o jogo.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.
