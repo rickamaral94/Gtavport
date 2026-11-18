@@ -848,6 +848,17 @@ void DiagHuntMenu(float ui) {
   ImGui::TextWrapped("Pare num ponto onde o defeito aparece. Comece o censo, feche o menu por alguns segundos, volte, "
                      "toque em Atualizar e use Anterior/Próximo: cada um desliga um pixel shader. Quando o defeito sumir "
                      "(a superfície some junto), anote o hash. Ele também fica no gtav.log (linhas [hunt]).");
+  // Caçador de piscadas (renderer: --gtav_native_flicker_catch): compara cada quadro REAL do jogo com os vizinhos; os
+  // que destoam vão para o gtav.log ([native] flicker #) e os grandes para logs/flicker (antes, o quadro, depois). Com a
+  // geração de quadros ligada, um preto que ele não pega veio de um quadro gerado.
+  {
+    const std::string fc = rex::cvar::GetFlagByName("gtav_native_flicker_catch");
+    bool flick = fc == "true" || fc == "1";
+    if (ImGui::Checkbox("Caçar piscadas (quadros pretos ou que destoam)", &flick)) {
+      rex::cvar::SetFlagByName("gtav_native_flicker_catch", flick ? "true" : "false");
+      REXLOG_INFO("[hunt] flicker_catch = {}", flick);
+    }
+  }
   // Os testes A/B/C (mip 0, cache exato, formatos de vértice antigos) saíram do menu na v0.4.10: cumpriram o
   // papel (17/11: listras corrigidas pelos formatos de vértice) e, esquecidos ligados, deixavam a imagem errada e
   // a thread de render 2x mais lenta. Continuam como opções de linha de comando para diagnóstico.

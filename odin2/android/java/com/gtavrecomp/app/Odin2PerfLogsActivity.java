@@ -146,6 +146,9 @@ public class Odin2PerfLogsActivity extends Activity {
                 java.util.List<File> all = new java.util.ArrayList<>(java.util.Arrays.asList(files));
                 File[] spv = perfDir().listFiles((d, n) -> n.startsWith("pipeline-") && n.endsWith(".spv"));
                 if (spv != null) all.addAll(java.util.Arrays.asList(spv));
+                // Caçar piscadas (menu Performance): os quadros antes/durante/depois de cada piscada (logs/flicker).
+                File[] flick = new File(ext, "logs/flicker").listFiles((d, n) -> n.endsWith(".ppm"));
+                if (flick != null) all.addAll(java.util.Arrays.asList(flick));
                 try (OutputStream os = getContentResolver().openOutputStream(uri); ZipOutputStream z = new ZipOutputStream(os)) {
                     byte[] buf = new byte[1 << 16];
                     for (File f : all) {
