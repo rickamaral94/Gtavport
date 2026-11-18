@@ -1,5 +1,13 @@
 > [!WARNING]
-> **Pré-release de teste: v0.5.3 — caçar as piscadas pretas.**
+> **Pré-release de teste: v0.5.4.**
+> - **Caçador de piscadas sem travar o jogo:** os quadros salvos (2,7 MB cada) agora são gravados noutra thread. Na
+>   sessão de 18/11 eles causaram 34 das 45 travadas por "espera do slot".
+> - **Detector de quadro gerado escuro** (sempre ligado com a geração de quadros, ~18 KB por quadro): compara o brilho do
+>   quadro gerado com o real; linhas `[fg] quadro gerado escuro` e a contagem a cada 10 s.
+> - **Teste do chão** em Caçar shader: "marcas do chão (viés de profundidade x8)". O GTA usa profundidade float24 e o
+>   port emula com float32; com o caçador ligado, passe pelo mesmo trecho com e sem e compare as piscadas.
+>
+> Da v0.5.3:
 > - **Caçar piscadas:** Select + R1 > Performance > Caçar shader > "Caçar piscadas". Compara cada quadro real do jogo com
 >   os vizinhos; os que destoam vão para o `gtav.log` (`flicker #`) e os grandes para `logs/flicker` (antes, durante e
 >   depois), incluídos na exportação de logs. Com a geração de quadros ligada, um preto que ele não pega veio de um

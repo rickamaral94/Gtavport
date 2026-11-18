@@ -102,3 +102,16 @@ jeito (a biblioteca de FS serve a qualquer VS; fast-link ~0,1 ms). Para os PS no
 biblioteca de FS custa o mesmo que o monolítico menos o VS): o ganho depende do intervalo entre criar o shader e o
 primeiro draw. Reforço sugerido: na abertura, pré-compilar em segundo plano as bibliotecas de FS de todo PS já visto
 em sessões anteriores. Os ~14 ms por PS são o custo real do ir3 para esses shaders; nenhuma opção do driver reduz.
+
+## Sessão da v0.5.3 (18/11 12:36–12:46, cidade, caçador ligado)
+
+- 29,7 fps reais; p95 37,6, p99 46,4 ms; > 50 ms: 116. Thread de render 21,3 ms por quadro (gargalo): a rota foi na
+  cidade, com 2459 draws por quadro em média (~1000 no campo), ~8 µs de gravação por draw.
+- 45 travadas por "espera do slot": **34 a menos de 0,3 s de um salvamento do caçador** (3 imagens de 2,7 MB gravadas na
+  thread de render). Corrigido na v0.5.4 (gravação noutra thread).
+- Caçador: 40 piscadas pequenas (6–26 dos 920 blocos), todas marcas do chão (faixas, linhas da pista, sombra do carro):
+  z-fighting. O GTA usa profundidade float24 (34 de 34 alvos); o port, float32. Teste do viés x8 na v0.5.4.
+- Às 12:38 (preto relatado) o caçador não registrou nada nos quadros reais: suspeita no quadro gerado. Detector na v0.5.4.
+- Outras oportunidades vistas (não feitas nesta entrega): na cidade a thread principal do jogo fica perto do limite
+  (ADPF: trabalho médio ~31 de 33,3 ms) — 42 travadas de CPU do jogo; a busca no cache de buffers (unordered_map, 3,2%) e o
+  hash XXH3 (5,5%) da thread de render são os maiores custos próprios do port nessa rota.
