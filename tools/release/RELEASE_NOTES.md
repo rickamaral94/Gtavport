@@ -1,5 +1,7 @@
 > [!WARNING]
-> **Pré-release de teste: v0.5.0 — geração de quadros 2x (ainda não testada no aparelho).**
+> **Pré-release de teste: v0.5.1 — geração de quadros 2x (ainda não testada no aparelho).**
+> - **Correção da v0.5.0:** o jogo não abria ("cannot locate symbol ANativeWindow_setFrameRate"). A função fica na
+>   libnativewindow.so; agora é procurada em tempo de execução, e o build confere todo símbolo importado.
 > - **Geração de quadros (LSFG 3.1):** o jogo continua em 30 quadros reais e a tela mostra 60. Em Configurações >
 >   **Geração de quadros**: toque em "Shaders do Lossless.dll" e escolha o **Lossless.dll da sua cópia do Lossless
 >   Scaling** (Steam). Os shaders são traduzidos no aparelho; o DLL não é guardado e nada dele vem no app. Depois
