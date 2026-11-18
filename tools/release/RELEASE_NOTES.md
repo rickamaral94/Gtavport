@@ -1,15 +1,12 @@
 > [!WARNING]
-> **Pré-release de teste: v0.5.1 — geração de quadros 2x (ainda não testada no aparelho).**
-> - **Correção da v0.5.0:** o jogo não abria ("cannot locate symbol ANativeWindow_setFrameRate"). A função fica na
->   libnativewindow.so; agora é procurada em tempo de execução, e o build confere todo símbolo importado.
-> - **Geração de quadros (LSFG 3.1):** o jogo continua em 30 quadros reais e a tela mostra 60. Em Configurações >
->   **Geração de quadros**: toque em "Shaders do Lossless.dll" e escolha o **Lossless.dll da sua cópia do Lossless
->   Scaling** (Steam). Os shaders são traduzidos no aparelho; o DLL não é guardado e nada dele vem no app. Depois
->   ligue "Geração de quadros 2x" (precisa de VSync e do limite de 30 FPS). Escala do fluxo 50% é a mais leve
->   (~4 ms de GPU por quadro gerado no TOTK). Soma ~17 ms de atraso.
-> - O mesmo desenho do TOTK/BOTW: o framegen do lsfg-vk-android no nosso device e na nossa fila, o menu e o contador
->   desenhados por cima do quadro gerado e do real.
-> - Da v0.4.10: testes A/B/C fora do menu; da v0.4.9: viés de profundidade na escala e atraso da GPU mínimo de 6 ms.
+> **Pré-release de teste: v0.5.2 — versão de medição.**
+> - **Por que cada efeito novo compila** (linhas `[pipe]` no `gtav.log`): PS novo, PS já visto com outro VS, mesmo par só
+>   com o bit de escala de render, mesmo par com outra constante, ou só estado — com o tempo de cada grupo. Decide o
+>   próximo passo contra as travadas ao entrar em área nova (docs/validacao-18-11.md, validado com o agente do Turnip).
+> - **Dica de desempenho do Android (ADPF):** a thread principal e a de render informam ao sistema a meta do quadro
+>   (33,3 ms a 30 fps) e o trabalho real; o sistema ajusta o clock dentro dos limites normais (não é overclock). Linhas
+>   `[adpf]` no log; `odin2_adpf=false` desliga.
+> - Da v0.5.1: geração de quadros 2x (LSFG 3.1, o seu Lossless.dll), testada no Odin: 60 na tela, p99 35 ms.
 >
 > Instala por cima sem perder saves; não precisa recompilar o jogo.
 
