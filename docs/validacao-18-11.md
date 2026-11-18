@@ -96,3 +96,9 @@ Conclusões:
   intervalo entre o jogo criar o shader e o primeiro draw que o usa.
 - ADPF: sessão aceita pelo Android; trabalho médio 20–32 ms de 33,3 ms. As travadas de CPU do jogo sumiram nesta rota;
   a temperatura maior precisa de outra sessão começando fria para separar o efeito.
+
+Leitura do agente do Turnip sobre a v0.5.2: os 12 "PS já visto com outro VS" (~35 ms cada) somem com a GPL de qualquer
+jeito (a biblioteca de FS serve a qualquer VS; fast-link ~0,1 ms). Para os PS novos, a GPL só desloca o custo (a
+biblioteca de FS custa o mesmo que o monolítico menos o VS): o ganho depende do intervalo entre criar o shader e o
+primeiro draw. Reforço sugerido: na abertura, pré-compilar em segundo plano as bibliotecas de FS de todo PS já visto
+em sessões anteriores. Os ~14 ms por PS são o custo real do ir3 para esses shaders; nenhuma opção do driver reduz.
