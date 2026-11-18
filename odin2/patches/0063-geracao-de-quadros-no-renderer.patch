@@ -34,18 +34,19 @@
  }
 --- a/gtav/src/native/renderer.cpp
 +++ b/gtav/src/native/renderer.cpp
-@@ -2,6 +2,10 @@
+@@ -2,6 +2,11 @@
  
  #include "renderer.h"
  #include "odin2_perf.h"  // Gtavport: odin2/perf
 +#ifdef __ANDROID__
 +#include "odin2_framegen.h"  // Gtavport: odin2/framegen
 +#include <android/native_window.h>
++#include <dlfcn.h>
 +#endif
  
  #include "backend.h"
  #include "deferred_list.h"
-@@ -882,10 +886,25 @@
+@@ -882,10 +887,25 @@
        fences_[i] = device_->createCommandFence();
        acquires_[i] = device_->createCommandSemaphore();
        gpu_times_[i] = device_->createQueryPool(2);
@@ -71,7 +72,7 @@
      REXLOG_INFO("[native] init: done");
      if (!backend_ok_) REXLOG_ERROR("[native] backend init failed; showing clear color only");
      return true;
-@@ -936,6 +955,8 @@
+@@ -936,6 +956,8 @@
        swapchain_.reset();  // destroys the old VkSurface before one is made on the window again
        if (render_window_) ANativeWindow_release(render_window_);
        render_window_ = fresh;
@@ -80,7 +81,7 @@
        swapchain_ = queue_cmd_->createSwapChain(plume::RenderSwapChainDesc(render_window_, kSwapchainFormat,
                                                                            kSwapchainBuffers));
        swapchain_->setVsyncEnabled(vsync_);
-@@ -1455,9 +1476,102 @@
+@@ -1455,9 +1477,112 @@
        });
      }
      auto main_submit_end = std::chrono::steady_clock::now();
@@ -101,7 +102,17 @@
 +    {
 +      const int want_rate = Framegen::Enabled() ? 60 : 0;  // (a tela a 60 Hz: na FIFO, cada imagem fica um vsync)
 +      if (render_window_ && want_rate != fg_rate_asked_) {
-+        ANativeWindow_setFrameRate(render_window_, float(want_rate), ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_DEFAULT);
++        // (procurada em tempo de execução: está na libnativewindow.so, não na libandroid.so; sem ela, nenhum pedido)
++        using SetFrameRateFn = int32_t (*)(ANativeWindow*, float, int8_t);
++        static const auto set_rate = [] {
++          void* h = dlopen("libnativewindow.so", RTLD_NOW | RTLD_NOLOAD);
++          if (!h) h = dlopen("libnativewindow.so", RTLD_NOW);
++          void* f = h ? dlsym(h, "ANativeWindow_setFrameRate") : nullptr;
++          if (!f) f = dlsym(RTLD_DEFAULT, "ANativeWindow_setFrameRate");
++          REXLOG_INFO("[fg] ANativeWindow_setFrameRate {}", f ? "disponível" : "ausente: a janela fica na taxa dela");
++          return reinterpret_cast<SetFrameRateFn>(f);
++        }();
++        if (set_rate) set_rate(render_window_, float(want_rate), ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_DEFAULT);
 +        fg_rate_asked_ = want_rate;
 +      }
 +    }
@@ -183,7 +194,7 @@
      bool acquired;
      {
        std::lock_guard lock(present_mutex_);
-@@ -1469,6 +1583,9 @@
+@@ -1469,6 +1594,9 @@
  #endif
      if (!acquired) {
        list_->end();
@@ -193,7 +204,7 @@
        if (backend_ok_) backend_.EndFrame(slot);
        const plume::RenderCommandList* lists = list_;
        plume::RenderCommandFence* fence = fences_[slot].get();
-@@ -1487,7 +1604,10 @@
+@@ -1487,7 +1615,10 @@
      // Gtavport (odin2_post): AA e upscaler do menu "Video" até o tamanho que a imagem ocupa na tela
      // (a mesma conta do letterbox abaixo). Com as opções desligadas devolve o próprio front.
      uint32_t present_descriptor = front_descriptor;
@@ -205,7 +216,7 @@
        float fw = float(swapchain_->getWidth()), fh = float(swapchain_->getHeight()), vw = fw, vh = fh;
  #if defined(__ANDROID__) || (defined(__APPLE__) && TARGET_OS_IPHONE)
        if (fw * 9.0f > fh * 16.0f) vw = fh * 16.0f / 9.0f; else vh = fw * 9.0f / 16.0f;
-@@ -1545,7 +1665,7 @@
+@@ -1545,7 +1676,7 @@
      if (front) {
  #if defined(__ANDROID__) || (defined(__APPLE__) && TARGET_OS_IPHONE)
        // Phone screens are wider than 16:9: keep the game's aspect ratio with black bars.
@@ -214,7 +225,7 @@
          float fw = float(w), fh = float(h), vw = fw, vh = fh;
          if (fw * 9.0f > fh * 16.0f) vw = fh * 16.0f / 9.0f; else vh = fw * 9.0f / 16.0f;
          list_->clearColor(0, plume::RenderColor(0.0f, 0.0f, 0.0f, 1.0f));
-@@ -1571,13 +1691,14 @@
+@@ -1571,13 +1702,14 @@
      if (backend_ok_ && REXCVAR_GET(gtav_native_fps))
        backend_.DrawCounter(list_, fps_value_, 8, 8, std::max(1u, h / 720), kSwapchainFormat);
      if (backend_ok_) {
@@ -232,7 +243,7 @@
      if (backend_ok_) backend_.EndFrame(slot);
      const plume::RenderCommandList* lists = list_;
      plume::RenderCommandSemaphore* wait = acquires_[slot].get();
-@@ -1941,6 +2062,13 @@
+@@ -1941,6 +2073,13 @@
    std::unique_ptr<plume::RenderCommandList> lists_[Backend::kFramesInFlight];
    std::unique_ptr<DeferredCommandList> deferred_;  // --gtav_native_record_thread
    std::unique_ptr<plume::RenderCommandList> present_lists_[Backend::kFramesInFlight];  // window copy

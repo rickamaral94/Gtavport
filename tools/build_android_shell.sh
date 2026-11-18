@@ -27,4 +27,19 @@ if [ -n "$bad" ]; then
   echo "$bad" >&2
   exit 1
 fi
+# Todo símbolo que a libgtav_fast.so importa (fora os do jogo) precisa existir nas bibliotecas que ela declara, na API
+# mínima do app (30). Um que não existe passa no link (stub de outra lib ou API mais nova) e o dlopen falha no aparelho:
+# v0.5.0, ANativeWindow_setFrameRate (fica na libnativewindow.so, não na libandroid.so).
+T=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64 SR=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android
+DEFS=$(mktemp)
+for f in "$SR"/30/{libandroid,liblog,libm,libdl,libc,libOpenSLES}.so "$SR/libc++_shared.so" "$SDK/lib/librexruntime.so" \
+         "$SDK/lib/librexgpu-xenos.so"; do "$NM" -D --defined-only "$f" | awk '{print $NF}'; done | sed 's/@.*//' | sort -u > "$DEFS"
+missing=$("$NM" -D --undefined-only "$B/libgtav_fast.so" | awk '$1=="U"{print $2}' | sed 's/@.*//' | sort -u |
+          grep -vE '^(sub_|__imp__|gtavfs_|rex_|gtav_game_)' | comm -23 - "$DEFS" || true)
+rm -f "$DEFS"
+if [ -n "$missing" ]; then
+  echo "ERRO: libgtav_fast.so importa símbolos que as bibliotecas dela (API 30) não têm (o dlopen falharia no aparelho):" >&2
+  echo "$missing" >&2
+  exit 1
+fi
 ls -la "$B"/*.so
