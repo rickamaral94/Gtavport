@@ -602,6 +602,9 @@ std::string RunDescription() {
 
 uint64_t OnFrame(const FrameSample& s) {
   EnsureThread();
+#ifdef __ANDROID__
+  AdpfFrame(s.record_ms);  // Gtavport: dica de desempenho do Android (odin2_adpf.cpp)
+#endif
   DiagOnFrame(s, menu::IsOpen());
   std::lock_guard lock(g_mutex);
   uint64_t seq = ++g_seq;

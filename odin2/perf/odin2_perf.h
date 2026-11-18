@@ -24,6 +24,8 @@ struct FrameSample {
 
 // Devolve o número do quadro, para OnGpuFrame casar o tempo de GPU que chega dois quadros depois.
 uint64_t OnFrame(const FrameSample& s);
+// ADPF (odin2_adpf.cpp): a cada quadro real, o trabalho da thread principal e da de render para o Android.
+void AdpfFrame(double record_ms);
 void OnGpuFrame(uint64_t seq, double gpu_ms);
 // GPU por tipo de passe (gtav_native_pass_gpu_times), ms por quadro, maior primeiro.
 void SetPassBreakdown(std::vector<std::pair<std::string, double>> passes, double total_ms);
