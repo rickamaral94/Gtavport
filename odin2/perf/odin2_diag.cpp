@@ -859,6 +859,18 @@ void DiagHuntMenu(float ui) {
       REXLOG_INFO("[hunt] flicker_catch = {}", flick);
     }
   }
+  // Teste do chão (v0.5.4): o GTA usa profundidade float24 (20 bits de mantissa) e o port emula com float32 (23 bits):
+  // a unidade do viés de profundidade do Xbox é até 8x a do float32 na mesma faixa. Com o caçador ligado, passar pelo
+  // mesmo trecho com e sem: se as piscadas das marcas do chão caem, o x8 vira o padrão.
+  {
+    const double bias = std::atof(rex::cvar::GetFlagByName("gtav_native_depth_bias_scale").c_str());
+    bool bias8 = bias > 1.5;
+    if (ImGui::Checkbox("Teste: marcas do chão (viés de profundidade x8)", &bias8)) {
+      rex::cvar::SetFlagByName("gtav_native_depth_bias_scale", bias8 ? "8" : "1");
+      rex::cvar::SetFlagByName("gtav_native_depth_slope_scale", bias8 ? "8" : "1");
+      REXLOG_INFO("[hunt] depth_bias_scale = {}", bias8 ? 8 : 1);
+    }
+  }
   // Os testes A/B/C (mip 0, cache exato, formatos de vértice antigos) saíram do menu na v0.4.10: cumpriram o
   // papel (17/11: listras corrigidas pelos formatos de vértice) e, esquecidos ligados, deixavam a imagem errada e
   // a thread de render 2x mais lenta. Continuam como opções de linha de comando para diagnóstico.
