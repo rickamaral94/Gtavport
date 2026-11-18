@@ -48,3 +48,24 @@ só nos trechos pesados.
    quadros). Pode fazer reflexos de faróis/postes piscarem ao virar a câmera. Investigar se aparecer.
 5. **Streaming (coisas aparecendo tarde):** limite de memória do jogo (512 MB do 360). Só com alteração no código do
    jogo (distância de LOD ou orçamento de streaming); experimental e desligado por padrão, se for feito.
+
+## Resposta do agente do Turnip (18/11, Amaral commit `da0ccbd`, `docs/audits/2026-11-18-gtav-pipeline-compile.md`)
+
+Medido no código do Mesa `a6aacf6` e numa reprodução com o par de shaders do caso extremo:
+
+- **Muda a premissa:** no Turnip, formato do alvo, blend, layout de vértice, depth/stencil e topologia **não** entram
+  na chave dos shaders. O mesmo VS+PS com outro estado custa 0,09–0,15 ms. O que recompila tudo é: **par VS/PS novo**,
+  **outra spec constant** ou outro layout. O nosso renderer põe spec constants por draw (o bit de alvo escalado da
+  escala 1,5x e outros): o mesmo par em alvo escalado e não escalado já são duas compilações.
+- **GPL:** anunciada sem condição; a correção de junção de set layouts já está na 5.9.18.1; sem bug conhecido, mas o CTS
+  de GPL não foi rodado. Usar o mesmo `VkPipelineLayout` em todas as bibliotecas, sem `INDEPENDENT_SETS`; manter a
+  volta ao monolítico e a opção de desligar.
+- **Custos (host, proporções):** bibliotecas de vertex input/fragment output ~0,05 ms; pré-raster (VS) 7–9 ms; fragment
+  shader até 0,9 s no caso extremo (o ir3 compila na criação da biblioteca); **fast-link 0,08 ms**; link com LTO ≈
+  monolítico. Recomendado: fast-link na hora e LTO/monolítico em segundo plano, trocando quando ficar pronto; medir antes
+  o custo de GPU do fast-link.
+- **Não recomendado:** opções do ir3 para compilar mais rápido (não existem sem perda), cache de disco do Mesa (não evita
+  a recompilação por troca de parceiro) e restrição de energia do KGSL (o governador está certo a 30 fps).
+
+**Próximo passo:** contar no log, por pipeline novo, se é PS novo, PS já visto com outro VS, ou o mesmo par com outra
+spec constant. Com isso decidir entre tirar a spec do caminho (push constant) e a GPL.
