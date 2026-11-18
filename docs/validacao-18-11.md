@@ -69,3 +69,8 @@ Medido no código do Mesa `a6aacf6` e numa reprodução com o par de shaders do 
 
 **Próximo passo:** contar no log, por pipeline novo, se é PS novo, PS já visto com outro VS, ou o mesmo par com outra
 spec constant. Com isso decidir entre tirar a spec do caminho (push constant) e a GPL.
+
+Complemento do agente do Turnip: a spec constant também entra na chave da biblioteca de FS na GPL, então tirá-la do
+caminho ajuda nos dois caminhos (não são excludentes). Passar para push constant custa um pouco de GPU (o ramo morto
+deixa de ser eliminado): desprezível para o bit de "alvo escalado" (só escala uma coordenada); manter a spec nos bits
+que ligam ou desligam blocos grandes. Ele mede instruções/registradores/waves dos dois jeitos com pares reais.
