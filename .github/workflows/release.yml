@@ -143,6 +143,7 @@ jobs:
         run: |
           JOBS=4 tools/build_android_shell.sh
           odin2/driver/build.sh
+          odin2/framegen/build.sh
       - name: Ferramentas de shader e APK de prova
         run: |
           chmod +x work/dxc/out/* work/llvm/build/android-llvm/out/*
@@ -198,6 +199,13 @@ jobs:
           cp "$RUNNER_TEMP/fsr/license.txt" "$L/AMD-FidelityFX-FSR-MIT.txt"
           git clone -q --depth 1 https://github.com/rickamaral94/Botwnspxci "$RUNNER_TEMP/botw"
           cp "$RUNNER_TEMP/botw/LICENSE" "$L/BOTWRecompAndroid-MIT.txt"
+          git clone -q --depth 1 https://github.com/rickamaral94/Totknspcxi "$RUNNER_TEMP/totk"
+          cp "$RUNNER_TEMP/totk/LICENSE" "$L/TOTKRecompAndroid-MIT.txt"
+          F=work/deps/lsfg-vk-android
+          cp "$F/framegen/LICENSE.md" "$L/lsfg-vk-framegen-MIT.txt"
+          cp "$F/thirdparty/dxbc/LICENSE.md" "$L/dxbc-DXVK-zlib.txt"
+          cp "$F/thirdparty/pe-parse/LICENSE" "$L/pe-parse-MIT.txt"
+          cp "$F/thirdparty/volk/LICENSE.md" "$L/volk-MIT.txt"
           echo "THIRD_PARTY_LICENSES=$L" >> "$GITHUB_ENV"
       - name: Montar a release (pureza de todos os arquivos)
         env:

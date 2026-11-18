@@ -21,7 +21,8 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
     private final List<String> other = new ArrayList<>();  // comentários e chaves que não são desta tela
     private final Map<Item, String> keys = new LinkedHashMap<>();
     private boolean dirty;
-    private Item diagItem;
+    private Item diagItem, fgState;
+    private static final int REQ_DLL = 41;
 
     // Padrões do jogo no Android (os REXCVAR_DEFINE de cada opção).
     private static final String[][] DEFAULTS = {
@@ -29,6 +30,7 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
             {"odin2_antialias", "off"}, {"gtav_native_max_anisotropy", "16"}, {"gtav_native_vsync", "true"},
             {"gtav_fps_limit", "30"}, {"gtav_native_fps", "false"}, {"gtav_touch_controls", "true"},
             {"gtav_native_async_pipelines", "true"}, {"user_language", "1"}, {"gtav_native_light_coarse", "0"},
+            {"odin2_framegen", "false"}, {"odin2_fg_flow", "0.5"}, {"odin2_fg_performance", "false"},
     };
 
     @Override
@@ -148,6 +150,29 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
         opt(d, "gtav_native_fps", "Contador de FPS", "Mostra os quadros por segundo no canto da tela.", ON_OFF, ON_OFF_NAMES);
         opt(d, "gtav_touch_controls", "Controles na tela",
                 "Mostra o controle virtual na tela de toque. Com um controle conectado ele pode ficar desligado.", ON_OFF, ON_OFF_NAMES);
+        Tab g = new Tab("Geração de quadros");
+        tabs.add(g);
+        fgState = g.add(new Item("Shaders do Lossless.dll", Odin2Framegen.state(this)
+                + ". Toque para importar o Lossless.dll da SUA cópia do Lossless Scaling (Steam): os shaders são "
+                + "traduzidos aqui e o arquivo não é guardado. Nada dele vem no app.", this::pickDll));
+        opt(g, "odin2_framegen", "Geração de quadros 2x",
+                "O jogo continua em 30 quadros reais e a tela mostra 60: entre cada dois quadros reais entra um gerado "
+                        + "(LSFG 3.1, o do Lossless Scaling). Soma ~17 ms de atraso e uns 4 ms de GPU por quadro gerado. "
+                        + "Precisa dos shaders acima e do limite de FPS em 30.", ON_OFF, ON_OFF_NAMES);
+        opt(g, "odin2_fg_flow", "Escala do fluxo",
+                "Resolução em que o movimento é estimado. Menor = mais leve (no TOTK, 50% custou ~4 ms por quadro gerado "
+                        + "contra ~10 ms em 100%).",
+                new String[] {"0.5", "0.75", "1"}, new String[] {"50% (leve)", "75%", "100%"});
+        opt(g, "odin2_fg_performance", "Modo desempenho (LSFG 3.1P)",
+                "Shaders mais leves do próprio LSFG, com um pouco menos de qualidade nas bordas em movimento.", ON_OFF, ON_OFF_NAMES);
+        g.add(new Item("Remover shaders", "Apaga os shaders traduzidos (files/lsfg). Não mexe no seu Lossless.dll.", () ->
+                new AlertDialog.Builder(this).setMessage("Remover os shaders da geração de quadros?")
+                        .setPositiveButton("Remover", (x, y) -> {
+                            Odin2Framegen.remove(this);
+                            rebuild();
+                        })
+                        .setNegativeButton("Cancelar", null).show()));
+
         Tab p = new Tab("Desempenho");
         tabs.add(p);
         File req = new File(getExternalFilesDir(null), "diag_request.txt");
@@ -192,6 +217,26 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
         if (key == null) return;
         ini.put(key, item.value());
         dirty = true;
+    }
+
+    private void pickDll() {
+        startActivityForResult(new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(android.content.Intent.CATEGORY_OPENABLE).setType("*/*"), REQ_DLL);
+    }
+
+    @Override
+    protected void onActivityResult(int req, int res, android.content.Intent data) {
+        super.onActivityResult(req, res, data);
+        if (req != REQ_DLL || res != RESULT_OK || data == null || data.getData() == null) return;
+        android.net.Uri uri = data.getData();
+        android.widget.Toast.makeText(this, "Traduzindo os shaders do Lossless.dll…", android.widget.Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            String msg = Odin2Framegen.importDll(this, uri);
+            runOnUiThread(() -> {
+                new AlertDialog.Builder(this).setTitle("Geração de quadros").setMessage(msg).setPositiveButton("OK", null).show();
+                rebuild();
+            });
+        }).start();
     }
 
     @Override

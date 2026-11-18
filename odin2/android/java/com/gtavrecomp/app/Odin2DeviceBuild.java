@@ -218,6 +218,10 @@ public final class Odin2DeviceBuild {
 
     /** Antes de o jogo carregar as bibliotecas (Odin2Driver.configure): ferramentas de shader do aparelho. */
     static void configureRuntime(Context c) {
+        try {  // geração de quadros: os shaders traduzidos do Lossless.dll (Odin2Framegen) ficam em files/lsfg/spirv
+            android.system.Os.setenv("GTAVPORT_LSFG_DIR", c.getFilesDir().getAbsolutePath(), true);
+        } catch (Exception ignored) {
+        }
         if (!available(c)) return;
         try {
             File root = ensureToolroot(c);

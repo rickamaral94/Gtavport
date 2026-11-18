@@ -9,3 +9,5 @@ DirectXShaderCompiler https://github.com/microsoft/DirectXShaderCompiler 416fab6
 llvm              https://github.com/llvm/llvm-project             llvmorg-19.1.5
 ndk               android-ndk                                      r29
 android-platform  android                                          36 (build-tools 36.0.0, igual ao upstream)
+lsfg-vk-android   https://github.com/GameNative/lsfg-vk-android    d33caceb5e26cc6773834c00b4eb570ad4906272
+lsfg-dxbc         https://github.com/GameNative/dxbc               78ab59a8aaeb43cd1b0a5e91ba86722433a10b78

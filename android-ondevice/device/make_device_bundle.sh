@@ -22,10 +22,12 @@ need "$ROOT/work/dxc/out/libdxcompiler.so" "android-ondevice/shaders/build_dxc.s
 need "$ROOT/work/shadertools/out/XenosRecomp" "build_xenosrecomp.sh"
 need "$ROOT/work/shadertools/out/shader_fix" "build_shader_fix.sh"
 need "$ROOT/build/odin2-driver/out/libodin2driver.so" "odin2/driver/build.sh"
+need "$ROOT/build/odin2-framegen/out/liblsfg_framegen.so" "odin2/framegen/build.sh"
 rm -rf "$OUT" && mkdir -p "$OUT/libs" "$OUT/assets" "$OUT/toolroot"
 
 L=$OUT/libs
 cp "$ROOT"/build/odin2-driver/out/*.so "$L/"
+cp "$ROOT"/build/odin2-framegen/out/*.so "$L/"  # frame gen (odin2/framegen)
 cp "$G/rexglue-sdk/out/install/android-arm64/bin/rexglue" "$L/librexglue.so"
 cp "$LLVM/out/clang" "$L/libclang.so"
 cp "$LLVM/out/lld" "$L/libld.lld.so"

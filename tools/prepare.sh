@@ -25,6 +25,19 @@ fetch_dep() {  # nome -> work/deps/<nome> limpo no pin
 }
 [ "${KEEP_DEPS:-0}" = 1 ] || rm -rf "$W/deps"
 for n in rexglue-sdk plume XenosRecomp libadrenotools; do fetch_dep "$n"; done
+# Frame gen (odin2/framegen): o lsfg-vk-android sem --recursive, porque o submódulo thirdparty/dxbc aponta para um
+# repositório que saiu do ar (PancakeTAS/dxbc). O mesmo commit vem da cópia GameNative/dxbc (lsfg-dxbc).
+fetch_lsfg() {
+  local d=$W/deps/lsfg-vk-android
+  [ -d "$d/.git" ] || git clone -q "$(url lsfg-vk-android)" "$d"
+  git -C "$d" fetch -q origin 2>/dev/null || true
+  git -C "$d" checkout -q -f "$(pin lsfg-vk-android)"
+  git -C "$d" submodule update -q --init thirdparty/pe-parse thirdparty/volk
+  [ -d "$d/thirdparty/dxbc/.git" ] || { rm -rf "$d/thirdparty/dxbc"; git clone -q "$(url lsfg-dxbc)" "$d/thirdparty/dxbc"; }
+  git -C "$d/thirdparty/dxbc" fetch -q origin 2>/dev/null || true
+  git -C "$d/thirdparty/dxbc" checkout -q -f "$(pin lsfg-dxbc)"
+}
+fetch_lsfg
 
 KEPT=$W/.kept
 rm -rf "$KEPT"
@@ -69,6 +82,7 @@ done
 # Código do Gtavport que os patches incluem (odin2/post -> work/gtav/odin2_post).
 cp -r "$ROOT/odin2/post" "$W/gtav/odin2_post"
 cp -r "$ROOT/odin2/perf" "$W/gtav/odin2_perf"
+cp -r "$ROOT/odin2/framegen" "$W/gtav/odin2_framegen"
 if [ -d "$KEPT" ]; then
   [ -d "$KEPT/sdk-out" ] && mv "$KEPT/sdk-out" "$W/gtav/rexglue-sdk/out"
   [ -d "$KEPT/build" ] && mv "$KEPT/build" "$W/gtav/build"
