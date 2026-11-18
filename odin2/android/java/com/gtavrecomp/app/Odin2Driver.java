@@ -78,6 +78,11 @@ final class Odin2Driver {
         }
         if (name.equals(SYSTEM)) {
             setenv("ODIN2_VK_DRIVER", SYSTEM);
+            // Variáveis da linha "Driver do sistema" (ex.: GTAVPORT_PIPELINE_STATS=1), só com ele escolhido.
+            for (String[] kv : parseEnv(driverEnv(c, SYSTEM))) {
+                setenv(kv[0], kv[1]);
+                Log.i(TAG, "  " + kv[0] + "=" + kv[1]);
+            }
             Log.i(TAG, "driver pedido: system");
             return;
         }

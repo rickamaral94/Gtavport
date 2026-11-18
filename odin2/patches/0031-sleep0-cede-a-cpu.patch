@@ -1,0 +1,66 @@
+--- a/include/rex/system/xobject.h
++++ b/include/rex/system/xobject.h
+@@ -224,8 +224,11 @@
+ 
+   // Stash native pointer into X_DISPATCH_HEADER
+   static void StashHandle(X_DISPATCH_HEADER* header, uint32_t handle) {
+-    header->wait_list_flink = kXObjSignature;
++    // Gtavport (upstream perf-linux 7cd394a): handle first, then the signature, so
++    // GetNativeObject can read a stashed handle without the global lock.
+     header->wait_list_blink = handle;
++    std::atomic_thread_fence(std::memory_order_release);
++    header->wait_list_flink = kXObjSignature;
+   }
+ 
+   static uint32_t TimeoutTicksToMs(int64_t timeout_ticks);
+--- a/src/system/xobject.cpp
++++ b/src/system/xobject.cpp
+@@ -454,10 +454,20 @@
+   // We identify this by setting wait_list_flink to a magic value. When set,
+   // wait_list_blink will hold a handle to our object.
+ 
+-  auto global_lock = rex::thread::global_critical_region::AcquireDirect();
+-
+   auto header = reinterpret_cast<X_DISPATCH_HEADER*>(native_ptr);
+ 
++  // Gtavport (upstream perf-linux 7cd394a): already-initialized objects are the common case
++  // (every KeSetEvent / KeWaitForSingleObject / KeReleaseSemaphore). StashHandle publishes the
++  // handle before the signature and LookupObject takes the object table's own lock, so the
++  // contended global recursive mutex is only needed for first-use creation.
++  if (header->wait_list_flink == kXObjSignature) {
++    std::atomic_thread_fence(std::memory_order_acquire);
++    uint32_t handle = header->wait_list_blink;
++    return kernel_state->object_table()->LookupObject<XObject>(handle);
++  }
++
++  auto global_lock = rex::thread::global_critical_region::AcquireDirect();
++
+   if (as_type == -1) {
+     as_type = header->type;
+   }
+--- a/src/system/xthread.cpp
++++ b/src/system/xthread.cpp
+@@ -470,7 +470,9 @@
+     set_name(fmt::format("XThread{:04X}", thread_->system_id()));
+   }
+ 
+-  if (creation_params_.creation_flags & 0x60) {
++  // Gtavport (upstream 7cd394a): the creation-flag priority is a SCHED_FIFO request on POSIX;
++  // honour it only when guest thread priorities are not ignored.
++  if ((creation_params_.creation_flags & 0x60) && !REXCVAR_GET(ignore_thread_priorities)) {
+     thread_->set_priority(creation_params_.creation_flags & 0x20 ? 1 : 0);
+   }
+ 
+@@ -1025,7 +1027,11 @@
+     }
+   } else {
+     if (timeout_ms == 0) {
+-      if (priority_ <= rex::thread::ThreadPriority::kBelowNormal) {
++      // Gtavport (upstream perf-linux 7cd394a): Sleep(0) yields. priority_ is the guest
++      // increment (0 by default) and kBelowNormal is 8 on POSIX, so every Sleep(0) used to be a
++      // 100 us nanosleep (GTA's update thread calls SleepEx ~1,500 times a frame). Only threads
++      // the guest lowered (negative increment) still sleep briefly.
++      if (priority_ < 0) {
+         rex::thread::Sleep(std::chrono::microseconds(100));
+       } else {
+         rex::thread::MaybeYield();

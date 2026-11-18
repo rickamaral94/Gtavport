@@ -1,0 +1,29 @@
+--- a/gtav/src/android_threads.cpp
++++ b/gtav/src/android_threads.cpp
+@@ -104,6 +104,26 @@
+                         moved, n - 2, total);
+         }
+       }
++      // Gtavport: Android rewrites a thread's affinity when it moves the app between cpusets (a screenshot,
++      // the notification shade, the overlay menu): pinned once at boot, the main thread ran 72% of the time
++      // on the middle cores in a 13-minute session on the Odin 2 (17/11). Check the mask every tick and pin
++      // it again when it changed.
++      if (want && pinned == 1) {
++        cpu_set_t now;
++        CPU_ZERO(&now);
++        if (sched_getaffinity(tid, sizeof(now), &now) != 0) {
++          tid = 0;  // gone: look it up again
++          pinned = -1;
++          continue;
++        }
++        if (CPU_COUNT(&now) != 1 || !CPU_ISSET(n - 1, &now)) {
++          static int repins = 0;
++          if (SetAffinity(tid, n - 1, n - 1) && ++repins <= 32)
++            REXLOG_INFO("[android] main thread {} lost its prime-core affinity ({} cores allowed): pinned again ({})",
++                        tid, CPU_COUNT(&now), repins);
++        }
++        continue;
++      }
+       if (want == pinned) continue;
+       if (!(want ? SetAffinity(tid, n - 1, n - 1) : SetAffinity(tid, 0, n - 1))) {
+         tid = 0;  // gone (or a new run of it): look it up again

@@ -1,6 +1,22 @@
+diff --git a/tools/android/app/AndroidManifest.xml b/tools/android/app/AndroidManifest.xml
+index 88e7edf..7e85fe6 100644
+--- a/tools/android/app/AndroidManifest.xml
++++ b/tools/android/app/AndroidManifest.xml
+@@ -18,7 +18,8 @@
+     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+     <uses-permission android:name="android.permission.WAKE_LOCK" />
+     <application
+-        android:label="GTA V Recomp"
++        android:label="Gtavport"
++        android:icon="@mipmap/ic_launcher"
+         android:appCategory="game"
+         android:isGame="true"
+         android:debuggable="true"
+diff --git a/tools/android/build_apk.sh b/tools/android/build_apk.sh
+index 93e3faa..d2b1b40 100755
 --- a/tools/android/build_apk.sh
 +++ b/tools/android/build_apk.sh
-@@ -40,9 +40,16 @@
+@@ -40,9 +40,16 @@ fi
  # Gtavport: ODIN2_PACKAGE troca o applicationId (as classes Java continuam com.gtavrecomp.app), para
  # o APK do Gtavport conviver com o do upstream sem conflito de assinatura nem perda de dados.
  # Gtavport: ODIN2_ASSETS = pasta de assets (toolroot da Fase 1).
@@ -18,7 +34,7 @@
  
  cp "${LIBS[@]}" "$SDK_LIB/librexruntime.so" "$SDK_LIB/librexgpu-xenos.so" \
     "$NDK_LIBCXX" stage/lib/arm64-v8a/
-@@ -65,7 +72,7 @@
+@@ -65,7 +72,7 @@ else
  "$BT/apksigner" sign --ks "$KEY" --ks-pass pass:android --key-pass pass:android \
    --out $NAME.apk aligned.apk
  fi
@@ -27,15 +43,3 @@
  ls -la $NAME.apk
  if [ "$1" = install ]; then
    adb install -r $NAME.apk
---- a/tools/android/app/AndroidManifest.xml
-+++ b/tools/android/app/AndroidManifest.xml
-@@ -18,7 +18,8 @@
-     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-     <uses-permission android:name="android.permission.WAKE_LOCK" />
-     <application
--        android:label="GTA V Recomp"
-+        android:label="Gtavport"
-+        android:icon="@mipmap/ic_launcher"
-         android:appCategory="game"
-         android:isGame="true"
-         android:debuggable="true"

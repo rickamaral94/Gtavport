@@ -1,6 +1,8 @@
+diff --git a/tools/android/app/java/com/gtavrecomp/app/GameActivity.java b/tools/android/app/java/com/gtavrecomp/app/GameActivity.java
+index 02eef08..ff36df7 100644
 --- a/tools/android/app/java/com/gtavrecomp/app/GameActivity.java
 +++ b/tools/android/app/java/com/gtavrecomp/app/GameActivity.java
-@@ -51,6 +51,16 @@
+@@ -51,6 +51,16 @@ public class GameActivity extends SDLActivity {
                  Log.w(TAG, "args.txt env: " + e);
              }
          }
@@ -17,9 +19,11 @@
          super.onCreate(savedInstanceState);
          getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
      }
+diff --git a/tools/android/build_apk.sh b/tools/android/build_apk.sh
+index aef6bf6..1323fd6 100755
 --- a/tools/android/build_apk.sh
 +++ b/tools/android/build_apk.sh
-@@ -21,8 +21,9 @@
+@@ -21,8 +21,9 @@ mkdir -p "$OUT"
  cd "$OUT"
  rm -rf classes stage && mkdir -p classes stage/lib/arm64-v8a
  
@@ -30,7 +34,7 @@
  "$BT/d8" --release --min-api 30 --lib "$JAR" --output stage $(find classes -name '*.class')
  
  MANIFEST=$APP/AndroidManifest.xml
-@@ -41,6 +42,7 @@
+@@ -41,6 +42,7 @@ fi
  
  cp "${LIBS[@]}" "$SDK_LIB/librexruntime.so" "$SDK_LIB/librexgpu-xenos.so" \
     "$NDK_LIBCXX" stage/lib/arm64-v8a/

@@ -25,12 +25,17 @@
 #include "odin2_procstat.h"
 
 #include "paths.h"
+#include "shader_compiler.h"
 
+#include <imgui.h>
 #include <rex/cvar.h>
 #include <rex/logging.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cerrno>
+#include <cstdio>
+#include <cstring>
 #include <chrono>
 #include <csignal>
 #include <ctime>
@@ -86,20 +91,34 @@ std::vector<double> g_gpu;  // tempo de GPU por quadro (chega depois)
 // A/B ("Comparar" no app): a cada 10 s de medição troca uma opção suspeita e o relatório compara os lados.
 // Feito para as fases em que o passe principal (alvo HDR 1280x721 com profundidade) ia de ~3 ms a ~75 ms.
 struct Variant {
-  const char* name;
-  const char* cvar;   // nullptr: como está
-  const char* value;
+  std::string name;
+  std::string cvar;   // vazio: como está
+  std::string value;
 };
-constexpr Variant kVariants[] = {
-    {"como está", nullptr, nullptr},
-    {"luzes por pixel (light_coarse=0)", "gtav_native_light_coarse", "0"},
+const Variant kVariants[] = {
+    {"como está", "", ""},
+    {"luzes a 2x2 (light_coarse=2)", "gtav_native_light_coarse", "2"},
     {"teste depois do shader, como antes (early_tests=false)", "gtav_native_early_tests", "false"},
     {"tudo a 2x2 (coarse_shading=2)", "gtav_native_coarse_shading", "2"},
 };
-constexpr int kVariantCount = int(sizeof(kVariants) / sizeof(kVariants[0]));
+// Variantes da medição atual (A/B: as de cima; "hdr": como está + um pixel shader do passe HDR desligado
+// por vez) e a ordem do rodízio (índices em g_vars; "como está" volta a cada poucos blocos no modo hdr, para
+// a comparação não depender de o jogador ter mudado de cena).
+std::vector<Variant> g_vars;
+std::vector<int> g_schedule;
+size_t g_slot = 0;
 std::atomic<int> g_variant{0};
-std::string g_ab_saved[8];
+std::vector<std::string> g_ab_saved;
 bool g_ab = false;
+bool g_hdr = false;  // "hdr": censo dos pixel shaders do passe HDR e rodízio com cada um desligado
+// Censo (backend -> NoteHdrDraw): draws por pixel shader no alvo HDR (R16G16B16A16_FLOAT >= 640 + depth).
+std::mutex g_census_mutex;
+std::unordered_map<uint64_t, uint64_t> g_census;
+std::atomic<uint64_t> g_census_frames{0};
+std::atomic<bool> g_census_on{false};
+std::vector<std::pair<uint64_t, uint64_t>> CensusSorted();  // (pixel shader, draws), do que mais desenha
+void SaveLogcat(const std::filesystem::path& out);  // logcat do processo, filtrado (driver e crashes)
+constexpr size_t kHdrCandidates = 24;  // 24 x 10 s + "como está" a cada 4: ~5 min dos 10
 std::vector<std::pair<int, double>> g_gpu_variant;  // (variante, GPU ms)
 // Linha do tempo (a cada 2 s) e os passes de GPU da janela de 300 quadros mais rápida e da mais lenta:
 // as travadas de GPU vêm em fases (11 ms -> 60 ms por quadro com os mesmos passes), e a média escondia.
@@ -268,6 +287,8 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
     REXLOG_INFO("[diag] {}", s);
   };
   line("run: " + RunDescription() + " | medição " + std::to_string(g_seconds) + " s de jogo");
+  line("sistema: " + SystemDescription());
+  line("driver: " + DriverDescription());
 
   std::vector<double> iv, iv_on, iv_off, rec, idle, gw;
   double game_ms = 0;
@@ -348,8 +369,10 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
       std::lock_guard lock(g_mutex);
       gv.swap(g_gpu_variant);
     }
-    line("comparar (A/B, 10 s cada, em rodízio): fps | p95 do quadro | GPU média e p95 | quadros > 100 ms");
-    for (int v = 0; v < kVariantCount; v++) {
+    line(g_hdr ? "passe HDR, um pixel shader desligado por vez (10 s cada; a imagem perde o que ele desenha): "
+                 "fps | p95 do quadro | GPU média e p95 | quadros > 100 ms"
+               : "comparar (A/B, 10 s cada, em rodízio): fps | p95 do quadro | GPU média e p95 | quadros > 100 ms");
+    for (int v = 0; v < int(g_vars.size()); v++) {
       std::vector<double> ivv, gg;
       size_t slow = 0;
       double tot = 0;
@@ -361,10 +384,27 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
         }
       for (const auto& [vv, ms] : gv)
         if (vv == v) gg.push_back(ms);
+      if (ivv.empty() && gg.empty()) continue;  // modo hdr: candidato que o tempo não alcançou
       std::snprintf(b, sizeof b, "  %5.1f fps | p95 %6.1f ms | GPU %5.1f / %6.1f ms | %4zu  %s",
                     tot > 0 ? 1000.0 * double(ivv.size()) / tot : 0, Percentile(ivv, 95), Mean(gg), Percentile(gg, 95), slow,
-                    kVariants[v].name);
+                    g_vars[v].name.c_str());
       line(b);
+    }
+  }
+
+  if (g_hdr) {
+    const auto census = CensusSorted();
+    const double frames = double(std::max<uint64_t>(1, g_census_frames.load()));
+    std::snprintf(b, sizeof b, "censo do passe HDR: %zu pixel shaders em %.0f quadros (draws por quadro; os %zu primeiros "
+                  "entraram no rodízio)", census.size(), frames, kHdrCandidates);
+    line(b);
+    for (size_t i = 0; i < census.size() && i < 64; i++) {
+      char hx[24];
+      std::snprintf(hx, sizeof hx, "ps_%016llX", static_cast<unsigned long long>(census[i].first));
+      std::snprintf(b, sizeof b, "  %016llX  %8.2f  ", static_cast<unsigned long long>(census[i].first),
+                    double(census[i].second) / frames);
+      // Forma da tradução (XenosRecomp): a máquina de estados while/switch(pc) pesou no Turnip (EFEADDD8...).
+      line(b + (census[i].first ? ShaderSourceInfo(hx) : std::string("sem pixel shader")));
     }
   }
 
@@ -460,12 +500,80 @@ void Report(std::map<int, ThreadUse> use, const ProcSnapshot& first, const ProcS
   std::ofstream(file) << text;
   std::ofstream(logs / "perf" / name) << text;
   REXLOG_INFO("[diag] relatório: {}", file.string());
+  SaveLogcat(logs / "perf" / ("logcat-" + name));
   if (g_from_file && !g_always) std::filesystem::remove(ExeDir() / "diag_request.txt", ec);
   std::lock_guard lock(g_mutex);
   g_last_report = file.string();
 }
 
+// logcat do próprio processo (o Android deixa um app ler os seus logs sem root), só as linhas do driver e do
+// carregamento: Turnip/Mesa/ir3 (TU_DEBUG=perf escreve aí), o loader Vulkan, o adrenotools e crashes nativos.
+// Vai para logs/perf/logcat-<relatório>.txt, que o "Exportar" da tela Logs de desempenho inclui no zip.
+void SaveLogcat(const std::filesystem::path& out) {
+#ifdef __ANDROID__
+  char cmd[96];
+  std::snprintf(cmd, sizeof cmd, "logcat -d -v threadtime --pid=%d 2>&1", int(getpid()));
+  FILE* p = popen(cmd, "r");
+  if (!p) return;
+  std::ofstream f(out);
+  f << "# logcat do processo do jogo (pid " << getpid() << "), filtrado: TU MESA ir3 freedreno vulkan adrenotools "
+       "Odin2Driver DEBUG libc\n";
+  static const char* const kKeys[] = {" TU",      "TU_",   "MESA",        "Mesa",   "ir3",  "freedreno", "turnip",
+                                      "vulkan",   "Vulkan", "adrenotools", "Odin2Driver", " DEBUG", " libc ", "kgsl"};
+  char line[2048];
+  size_t kept = 0;
+  while (std::fgets(line, sizeof line, p) && kept < 20000) {
+    for (const char* k : kKeys)
+      if (std::strstr(line, k)) {
+        f << line;
+        kept++;
+        break;
+      }
+  }
+  pclose(p);
+  REXLOG_INFO("[diag] logcat: {} linhas em {}", kept, out.string());
+#else
+  (void)out;
+#endif
+}
+
 // Thread da medição: espera o jogo, amostra /proc a cada 50 ms, o aparelho a cada 2 s e conduz o amostrador.
+// Modo hdr: os pixel shaders do censo, do que mais desenha no alvo HDR ao que menos, cada um num bloco de
+// 10 s desligado (--gtav_native_skip_ps). Um shader que custa caro some do GPU quando desligado.
+std::vector<std::pair<uint64_t, uint64_t>> CensusSorted() {
+  std::vector<std::pair<uint64_t, uint64_t>> v;
+  {
+    std::lock_guard census(g_census_mutex);
+    v.assign(g_census.begin(), g_census.end());
+  }
+  std::sort(v.begin(), v.end(), [](const auto& a, const auto& b) { return a.second > b.second || (a.second == b.second && a.first < b.first); });
+  return v;
+}
+
+void BuildVariants() {
+  if (g_hdr) {
+    g_vars = {{"como está", "", ""}};
+    const auto census = CensusSorted();
+    const double frames = double(std::max<uint64_t>(1, g_census_frames.load()));
+    char b[96];
+    for (size_t i = 0; i < census.size() && i < kHdrCandidates; i++) {
+      char hx[20];
+      std::snprintf(hx, sizeof hx, "%016llX", static_cast<unsigned long long>(census[i].first));
+      const std::string hex = hx;
+      std::snprintf(b, sizeof b, "sem ps %s (%.1f draws/quadro)", hex.c_str(), double(census[i].second) / frames);
+      g_vars.push_back({b, "gtav_native_skip_ps", hex});
+    }
+  }
+  g_ab_saved.assign(g_vars.size(), std::string());
+  g_schedule.clear();
+  for (int v = 0; v < int(g_vars.size()); v++) {
+    if (g_hdr && v > 0 && (v - 1) % 4 == 0) g_schedule.push_back(0);  // "como está" de novo a cada 4
+    if (!g_hdr || v > 0) g_schedule.push_back(v);
+  }
+  g_slot = 0;
+  g_variant = g_schedule.empty() ? 0 : g_schedule[0];
+}
+
 void Run() {
   setpriority(PRIO_PROCESS, 0, -2);  // um pouco acima do normal: amostras a tempo (custa quase nada)
   FindClusters();
@@ -514,6 +622,7 @@ void Run() {
       g_pc_n = 0;
       g_pc_lost = 0;
       REXLOG_INFO("[diag] medindo {} s de jogo; amostrando o PC de:{}", g_seconds, list.empty() ? " nenhuma" : list);
+      if (g_ab) BuildVariants();
       g_pass_flag_before = rex::cvar::GetFlagByName("gtav_native_pass_gpu_times");
       rex::cvar::SetFlagByName("gtav_native_pass_gpu_times", "true");  // GPU por passe durante a medição
       block_start = now;
@@ -527,12 +636,14 @@ void Run() {
         block_start = now;
         // A/B: a cada 10 s (dois blocos) a próxima variante; volta a opção da anterior antes.
         static int blocks = 0;
-        if (g_ab && (++blocks % 2) == 0) {
-          const int cur = g_variant.load(), next = (cur + 1) % kVariantCount;
-          if (kVariants[cur].cvar) rex::cvar::SetFlagByName(kVariants[cur].cvar, g_ab_saved[cur]);
-          if (kVariants[next].cvar) {
-            g_ab_saved[next] = rex::cvar::GetFlagByName(kVariants[next].cvar);
-            rex::cvar::SetFlagByName(kVariants[next].cvar, kVariants[next].value);
+        if (g_ab && (++blocks % 2) == 0 && !g_schedule.empty()) {
+          const int cur = g_variant.load();
+          g_slot = (g_slot + 1) % g_schedule.size();
+          const int next = g_schedule[g_slot];
+          if (!g_vars[cur].cvar.empty()) rex::cvar::SetFlagByName(g_vars[cur].cvar, g_ab_saved[cur]);
+          if (!g_vars[next].cvar.empty()) {
+            g_ab_saved[next] = rex::cvar::GetFlagByName(g_vars[next].cvar);
+            rex::cvar::SetFlagByName(g_vars[next].cvar, g_vars[next].value);
           }
           g_variant = next;
         }
@@ -605,8 +716,12 @@ void Run() {
       rex::cvar::SetFlagByName("gtav_native_pass_gpu_times", g_pass_flag_before.empty() ? "false" : g_pass_flag_before);
       if (g_ab) {
         const int cur = g_variant.load();
-        if (kVariants[cur].cvar) rex::cvar::SetFlagByName(kVariants[cur].cvar, g_ab_saved[cur]);
+        if (!g_vars[cur].cvar.empty()) rex::cvar::SetFlagByName(g_vars[cur].cvar, g_ab_saved[cur]);
         g_variant = 0;
+      }
+      if (g_hdr) {
+        rex::cvar::SetFlagByName("gtav_native_hdr_census", "false");
+        g_census_on = false;
       }
       Report(std::move(acc), first, last, nsnaps >= 2, dev, window);
       g_state = State::kIdle;
@@ -633,7 +748,11 @@ void Arm(int seconds, const char* why, bool from_file, bool always = false) {
     g_pass_worst.clear();
     g_pass_best_total = g_pass_worst_total = 0;
     g_ab = false;
+    g_hdr = false;
     g_variant = 0;
+    g_slot = 0;
+    g_vars.assign(std::begin(kVariants), std::end(kVariants));
+    g_schedule.clear();
     g_gpu_variant.clear();
     g_nongame_frames = 0;
     g_armed_at = Clock::now();
@@ -658,15 +777,27 @@ void DiagCheckRequestFile() {
   if (seconds > 0) {
     Arm(std::min(seconds, 3600), mode == "always" ? "logs de desempenho em todo início (app)"
                                  : mode == "ab"   ? "comparar opções (A/B) no app"
+                                 : mode == "hdr"  ? "isolar o passe HDR (um pixel shader por vez) no app"
                                                   : "pedido no app",
         true, mode == "always");
     std::lock_guard lock(g_mutex);
-    g_ab = mode == "ab";
+    g_ab = mode == "ab" || mode == "hdr";
+    g_hdr = mode == "hdr";
+    if (g_hdr) {  // o censo começa já na espera (5 s de jogo), para o rodízio ter candidatos
+      {
+        std::lock_guard census(g_census_mutex);
+        g_census.clear();
+      }
+      g_census_frames = 0;
+      g_census_on = true;
+      rex::cvar::SetFlagByName("gtav_native_hdr_census", "true");
+    }
   }
   else std::filesystem::remove(f, ec);
 }
 
 void DiagOnFrame(const FrameSample& s, bool menu_open) {
+  if (g_census_on.load(std::memory_order_relaxed) && !menu_open && s.draws >= kGameplayDraws) g_census_frames++;
   const State st = g_state.load(std::memory_order_relaxed);
   if (st != State::kWaiting && st != State::kRecording) return;
   const bool game = !menu_open && s.draws >= kGameplayDraws && s.interval_ms < 5000;  // um quadro de 5 s+ é loading
@@ -691,6 +822,119 @@ void DiagOnFrame(const FrameSample& s, bool menu_open) {
   g_game_ms += s.interval_ms;
   if (g_game_ms >= g_seconds * 1000.0 || Clock::now() - g_rec_start > std::chrono::seconds(g_seconds * 3 + 30))
     g_state = State::kReporting;
+}
+
+// Menu Performance > Caçar shader: censo do G-buffer (ou do passe HDR) e um pixel shader desligado por vez, ao vivo
+// (--gtav_native_skip_ps), para achar o shader de um defeito de imagem olhando a tela.
+namespace {
+std::vector<std::pair<uint64_t, uint64_t>> g_hunt_list;
+int g_hunt_index = -1;  // -1: nenhum desligado
+int g_hunt_gbuffer = 1;  // 1: G-buffer, 0: passe HDR (RadioButton)
+double g_hunt_frames = 1;
+
+void HuntApply() {
+  char hex[20] = "";
+  if (g_hunt_index >= 0 && g_hunt_index < int(g_hunt_list.size()))
+    std::snprintf(hex, sizeof hex, "%016llX", static_cast<unsigned long long>(g_hunt_list[g_hunt_index].first));
+  rex::cvar::SetFlagByName("gtav_native_skip_ps", hex);
+  REXLOG_INFO("[hunt] {} ({} de {} no passe {})", hex[0] ? std::string("desligado ps ") + hex : std::string("nenhum desligado"),
+              g_hunt_index + 1, g_hunt_list.size(), g_hunt_gbuffer ? "G-buffer" : "HDR");
+}
+}  // namespace
+
+void DiagHuntMenu(float ui) {
+  (void)ui;
+  if (!ImGui::TreeNode("Caçar shader (listras e outros defeitos de imagem)")) return;
+  ImGui::TextWrapped("Pare num ponto onde o defeito aparece. Comece o censo, feche o menu por alguns segundos, volte, "
+                     "toque em Atualizar e use Anterior/Próximo: cada um desliga um pixel shader. Quando o defeito sumir "
+                     "(a superfície some junto), anote o hash. Ele também fica no gtav.log (linhas [hunt]).");
+  // Caçador de piscadas (renderer: --gtav_native_flicker_catch): compara cada quadro REAL do jogo com os vizinhos; os
+  // que destoam vão para o gtav.log ([native] flicker #) e os grandes para logs/flicker (antes, o quadro, depois). Com a
+  // geração de quadros ligada, um preto que ele não pega veio de um quadro gerado.
+  {
+    const std::string fc = rex::cvar::GetFlagByName("gtav_native_flicker_catch");
+    bool flick = fc == "true" || fc == "1";
+    if (ImGui::Checkbox("Caçar piscadas (quadros pretos ou que destoam)", &flick)) {
+      rex::cvar::SetFlagByName("gtav_native_flicker_catch", flick ? "true" : "false");
+      REXLOG_INFO("[hunt] flicker_catch = {}", flick);
+    }
+  }
+  // Teste do chão (v0.5.4): o GTA usa profundidade float24 (20 bits de mantissa) e o port emula com float32 (23 bits):
+  // a unidade do viés de profundidade do Xbox é até 8x a do float32 na mesma faixa. Com o caçador ligado, passar pelo
+  // mesmo trecho com e sem: se as piscadas das marcas do chão caem, o x8 vira o padrão.
+  {
+    const double bias = std::atof(rex::cvar::GetFlagByName("gtav_native_depth_bias_scale").c_str());
+    bool bias8 = bias > 1.5;
+    if (ImGui::Checkbox("Teste: marcas do chão (viés de profundidade x8)", &bias8)) {
+      rex::cvar::SetFlagByName("gtav_native_depth_bias_scale", bias8 ? "8" : "1");
+      rex::cvar::SetFlagByName("gtav_native_depth_slope_scale", bias8 ? "8" : "1");
+      REXLOG_INFO("[hunt] depth_bias_scale = {}", bias8 ? 8 : 1);
+    }
+  }
+  // Os testes A/B/C (mip 0, cache exato, formatos de vértice antigos) saíram do menu na v0.4.10: cumpriram o
+  // papel (17/11: listras corrigidas pelos formatos de vértice) e, esquecidos ligados, deixavam a imagem errada e
+  // a thread de render 2x mais lenta. Continuam como opções de linha de comando para diagnóstico.
+  const bool on = g_census_on.load();
+  if (!on) {
+    ImGui::RadioButton("G-buffer (superfícies opacas)", &g_hunt_gbuffer, 1);
+    ImGui::SameLine();
+    ImGui::RadioButton("Passe HDR (luzes, céu)", &g_hunt_gbuffer, 0);
+    if (ImGui::Button("Começar censo")) {
+      {
+        std::lock_guard census(g_census_mutex);
+        g_census.clear();
+      }
+      g_census_frames = 0;
+      g_hunt_list.clear();
+      g_hunt_index = -1;
+      rex::cvar::SetFlagByName("gtav_native_census_gbuffer", g_hunt_gbuffer ? "true" : "false");
+      rex::cvar::SetFlagByName("gtav_native_hdr_census", "true");
+      g_census_on = true;
+    }
+  } else {
+    ImGui::Text("Censo do %s: %llu quadros de jogo contados", g_hunt_gbuffer ? "G-buffer" : "passe HDR",
+                static_cast<unsigned long long>(g_census_frames.load()));
+    if (ImGui::Button("Atualizar lista")) {
+      g_hunt_list = CensusSorted();
+      g_hunt_frames = double(std::max<uint64_t>(1, g_census_frames.load()));
+      g_hunt_index = -1;
+      HuntApply();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("< Anterior") && !g_hunt_list.empty()) {
+      g_hunt_index = g_hunt_index <= -1 ? int(g_hunt_list.size()) - 1 : g_hunt_index - 1;
+      HuntApply();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Próximo >") && !g_hunt_list.empty()) {
+      g_hunt_index = g_hunt_index + 1 >= int(g_hunt_list.size()) ? -1 : g_hunt_index + 1;
+      HuntApply();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Nenhum")) {
+      g_hunt_index = -1;
+      HuntApply();
+    }
+    if (g_hunt_index >= 0 && g_hunt_index < int(g_hunt_list.size()))
+      ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Desligado: ps %016llX (%d de %zu, %.1f draws/quadro)",
+                         static_cast<unsigned long long>(g_hunt_list[g_hunt_index].first), g_hunt_index + 1,
+                         g_hunt_list.size(), double(g_hunt_list[g_hunt_index].second) / g_hunt_frames);
+    else
+      ImGui::Text("Nenhum shader desligado (%zu na lista)", g_hunt_list.size());
+    if (ImGui::Button("Parar")) {
+      g_hunt_index = -1;
+      HuntApply();
+      rex::cvar::SetFlagByName("gtav_native_hdr_census", "false");
+      g_census_on = false;
+    }
+  }
+  ImGui::TreePop();
+}
+
+void DiagNoteHdrDraw(uint64_t ps_hash) {
+  if (!g_census_on.load(std::memory_order_relaxed)) return;
+  std::lock_guard census(g_census_mutex);
+  g_census[ps_hash]++;
 }
 
 void DiagOnGpu(double gpu_ms) {

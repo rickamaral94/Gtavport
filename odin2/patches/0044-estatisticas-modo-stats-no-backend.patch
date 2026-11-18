@@ -1,0 +1,13 @@
+--- a/gtav/src/native/backend.cpp
++++ b/gtav/src/native/backend.cpp
+@@ -1625,8 +1625,8 @@
+   std::unordered_map<uint64_t, std::string> pipeline_desc_text;  // pipeline key -> state (only with the variable)
+   static bool PipelineStatsOn() {
+     static const bool on = [] {
+-      const char* v = std::getenv("GTAVPORT_PIPELINE_STATS");
+-      return v && v[0] == '1';
++      const char* v = std::getenv("GTAVPORT_PIPELINE_STATS");  // "1" (with IR) or "stats" (statistics only)
++      return v && (v[0] == '1' || std::strcmp(v, "stats") == 0);
+     }();
+     return on;
+   }

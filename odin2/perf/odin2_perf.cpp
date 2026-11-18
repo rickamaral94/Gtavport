@@ -32,7 +32,13 @@
 #include <thread>
 
 #include <dlfcn.h>
+#include <sys/utsname.h>
 #include <unistd.h>
+#ifdef __ANDROID__
+#include <sys/system_properties.h>
+#endif
+
+extern char** environ;
 
 namespace gtav::native::perf {
 
@@ -78,7 +84,7 @@ uint64_t g_rec_first = 0, g_rec_written = 0;
 std::string g_rec_base, g_last_summary;
 std::deque<std::string> g_csv_pending;  // linhas prontas para a thread de E/S
 std::chrono::steady_clock::time_point g_rec_start;
-double g_head_start = -1, g_head_max = -1, g_mhz_start = -1, g_mhz_min = 1e9;
+double g_head_start = -1, g_head_max = -1, g_mhz_start = -1, g_mhz_min = 1e9, g_temp_max = -1;
 double g_cap_target_ms = 0;
 
 std::thread g_thread;
@@ -321,14 +327,31 @@ std::string Settings() {
   s += " render_scale=" + g("gtav_native_render_scale");
   s += " antialias=" + g("odin2_antialias") + " upscaler=" + g("odin2_upscaler");
   s += " async_pipelines=" + g("gtav_native_async_pipelines") + " gpu_lag_ms=" + g("gpu_skip_rendering_lag_ms");
+  s += " early_tests=" + g("gtav_native_early_tests") + " coarse_shading=" + g("gtav_native_coarse_shading");
+  s += " light_coarse=" + g("gtav_native_light_coarse") + " anisotropy=" + g("gtav_native_max_anisotropy");
   return s;
 }
 
+// Variáveis que mudam o driver ou o jogo: as do Gtavport (ODIN2_VK_DRIVER, GTAV_*, GTAVPORT_*) e todas as do
+// Mesa/Turnip/ir3/freedreno.
 std::string EnvLine() {
   std::string s;
-  for (const char* k : {"ODIN2_VK_DRIVER", "TU_DEBUG", "MESA_VK_ABORT_ON_DEVICE_LOSS", "FD_DEV_FEATURES"})
-    if (const char* v = std::getenv(k)) s += std::string(k) + "=" + v + " ";
+  for (char** e = environ; e && *e; ++e) {
+    const std::string kv = *e;
+    for (const char* pre : {"ODIN2_VK_DRIVER=", "TU_", "IR3_", "MESA_", "FD_", "ADRENOTOOLS", "GTAV_", "GTAVPORT_"})
+      if (kv.rfind(pre, 0) == 0) {
+        s += kv + " ";
+        break;
+      }
+  }
   return s.empty() ? "(nenhuma)" : s;
+}
+
+std::string ReadSmall(const char* path) {
+  std::ifstream f(path);
+  std::string s((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  while (!s.empty() && (s.back() == '\n' || s.back() == ' ')) s.pop_back();
+  return s;
 }
 
 std::string Summary(const std::vector<Frame>& v, double secs, double cap_ms) {
@@ -363,8 +386,16 @@ std::string Summary(const std::vector<Frame>& v, double secs, double cap_ms) {
                 Fmt(g_head_start, "", 2).c_str(), Fmt(g_head_max, "", 2).c_str(), Fmt(g_mhz_start, " MHz", 0).c_str(),
                 Fmt(g_mhz_min < 1e9 ? g_mhz_min : -1, " MHz", 0).c_str(), Fmt(g_gpu_mhz_max > 0 ? g_gpu_mhz_max : -1, " MHz", 0).c_str());
   o += b;
-  if (g_mhz_min < 1e9 && g_gpu_mhz_max > 0 && g_mhz_min < 0.7 * g_gpu_mhz_max)
-    o += "  ATENÇÃO: clock da GPU caiu abaixo de 70 % do máximo: throttling térmico provável.\n";
+  if (g_mhz_min < 1e9 && g_gpu_mhz_max > 0 && g_mhz_min < 0.7 * g_gpu_mhz_max) {
+    // Com limite de fps a GPU sobra e o governador baixa o clock sozinho (17/11: 401 MHz a 43-62 °C, 30 fps):
+    // só é aquecimento quando a temperatura também subiu.
+    std::snprintf(b, sizeof b, "  clock da GPU caiu abaixo de 70 %% do máximo (temperatura máx. %s): %s\n",
+                  Fmt(g_temp_max, " °C", 0).c_str(),
+                  g_temp_max >= 75 ? "ATENÇÃO, throttling térmico provável."
+                  : g_temp_max >= 0 ? "temperatura baixa, é o governador poupando energia (GPU com folga), não aquecimento."
+                                    : "sem temperatura para separar aquecimento de economia de energia.");
+    o += b;
+  }
   if (g_head_max >= 0.85) o += "  ATENÇÃO: margem térmica chegou a >= 0,85 (perto do limite do sistema).\n";
   if (!g_passes.empty()) {
     std::snprintf(b, sizeof b, "\nGPU por tipo de passe (últimos 300 quadros, total %.2f ms):\n", g_passes_total);
@@ -402,6 +433,7 @@ void StartRecording() {  // com g_mutex
   g_head_max = g_sensors.headroom;
   g_mhz_start = g_sensors.gpu_mhz;
   g_mhz_min = g_sensors.gpu_mhz > 0 ? g_sensors.gpu_mhz : 1e9;
+  g_temp_max = g_sensors.gpu_temp;
   g_cap_target_ms = CapTargetMs();
   g_csv_pending.clear();
   g_csv_pending.push_back(kCsvHeader);
@@ -471,6 +503,7 @@ void IoLoop() {
       if (g_recording) {
         if (s.headroom > g_head_max) g_head_max = s.headroom;
         if (s.gpu_mhz > 0 && s.gpu_mhz < g_mhz_min) g_mhz_min = s.gpu_mhz;
+        if (s.gpu_temp > g_temp_max) g_temp_max = s.gpu_temp;
         // Quadros cujo tempo de GPU já chegou viram linhas do CSV.
         uint64_t ready = g_seq > kGpuLag ? g_seq - kGpuLag : 0;
         for (uint64_t q = std::max(g_rec_written + 1, g_rec_first); q <= ready; q++) {
@@ -517,6 +550,45 @@ DeviceSample LatestDevice() {
   return d;
 }
 
+std::string SystemDescription() {
+  std::string s;
+#ifdef __ANDROID__
+  auto prop = [](const char* k) {
+    char v[PROP_VALUE_MAX] = {};
+    __system_property_get(k, v);
+    return std::string(v[0] ? v : "?");
+  };
+  s += "Android " + prop("ro.build.version.release") + " (API " + prop("ro.build.version.sdk") + ", " +
+       prop("ro.product.manufacturer") + " " + prop("ro.product.model") + ", build " + prop("ro.build.id") + ")";
+#endif
+  utsname u{};
+  if (uname(&u) == 0) s += std::string(s.empty() ? "" : " | ") + "kernel " + u.release;
+  const std::string model = ReadSmall("/sys/class/kgsl/kgsl-3d0/gpu_model");
+  s += " | kgsl gpu_model " + (model.empty() ? std::string("n/d") : model);
+  return s;
+}
+
+std::string DriverDescription() {
+  std::string driver;
+  {
+    std::lock_guard lock(g_mutex);
+    driver = g_driver_json;
+  }
+  std::string s = "pedido/efetivo: ";
+  if (const char* f = std::getenv("ODIN2_VK_STATUS_FILE")) {
+    std::string st = ReadSmall(f);
+    for (char& c : st)
+      if (c == '\n') c = ' ';
+    s += st.empty() ? "n/d" : st;
+  } else {
+    s += "n/d";
+  }
+  s += " | " + JsonField(driver, "driverName") + " " + JsonField(driver, "driverInfo") + " | Vulkan " +
+       JsonField(driver, "api") + " | driverID " + JsonField(driver, "driverID") + " | conformance " +
+       JsonField(driver, "conformance") + " | aberto: " + JsonField(driver, "loadedLibs");
+  return s;
+}
+
 std::string RunDescription() {
   std::string device, driver;
   {
@@ -530,6 +602,9 @@ std::string RunDescription() {
 
 uint64_t OnFrame(const FrameSample& s) {
   EnsureThread();
+#ifdef __ANDROID__
+  AdpfFrame(s.record_ms);  // Gtavport: dica de desempenho do Android (odin2_adpf.cpp)
+#endif
   DiagOnFrame(s, menu::IsOpen());
   std::lock_guard lock(g_mutex);
   uint64_t seq = ++g_seq;
@@ -577,6 +652,7 @@ void BuildMenu(float ui) {
     }
     ImGui::TextDisabled("Feche o menu e jogue: começa após 5 s seguidos de jogo. Relatório em logs/perf (tela Logs\n"
                         "de desempenho do app) e no gtav.log, linhas [diag].");
+    DiagHuntMenu(ui);
     ImGui::Separator();
   }
   std::lock_guard lock(g_mutex);

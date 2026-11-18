@@ -1,0 +1,6 @@
+{
+  global:
+    lsfgfg_*;
+  local:
+    *;
+};

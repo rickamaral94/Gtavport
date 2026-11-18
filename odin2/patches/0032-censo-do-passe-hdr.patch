@@ -1,0 +1,24 @@
+--- a/gtav/src/native/backend.cpp
++++ b/gtav/src/native/backend.cpp
+@@ -224,6 +224,11 @@
+ REXCVAR_DEFINE_INT32(gtav_native_light_coarse, 0, "GTAV",
+                      "Native renderer: shade the deferred light draws at a coarser rate (0 = every pixel, 1 = 2x1, "
+                      "2 = 2x2; VK_KHR_fragment_shading_rate)");
++// Gtavport (odin2/perf, "Logs de desempenho > Isolar o passe HDR"): counts the draws of each pixel shader in
++// the full-size HDR pass (R16G16B16A16_FLOAT >= 640 wide with depth), the pass that went from ~3 to ~80 ms
++// on the Odin 2. The diagnostic then turns those shaders off one at a time (--gtav_native_skip_ps).
++REXCVAR_DEFINE_BOOL(gtav_native_hdr_census, false, "GTAV",
++                    "Diagnostic: count the pixel shaders drawn into the full-size HDR target (Medir desempenho)");
+ REXCVAR_DEFINE_INT32(gtav_native_coarse_shading, 0, "GTAV",
+                      "Native renderer: shade the 3D passes (full-size targets with depth) at a coarser rate, "
+                      "a cheaper stand-in for a lower resolution: 0 = every pixel, 1 = 2x1 pixels, 2 = 2x2 "
+@@ -4741,6 +4746,9 @@
+       ds.pipeline = pipeline;
+       ds.bias_set = false;  // pipelines without dynamic depth bias overwrite it
+     }
++    if (REXCVAR_GET(gtav_native_hdr_census) && bound_depth && bound_color[0] && !bound_color[1] &&
++        bound_color[0]->format == RenderFormat::R16G16B16A16_FLOAT && bound_color[0]->width >= 640)
++      perf::DiagNoteHdrDraw(d.ps_hash);
+     // --gtav_native_light_coarse: coarser shading for this draw only; the pass's own rate comes back
+     // right after it (the state outlives the draw: blits and post-processing would inherit it).
+     struct RateRestore {

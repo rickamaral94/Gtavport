@@ -1,0 +1,42 @@
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -4267,6 +4267,12 @@
+             featuresChain = &accelerationStructureFeatures;
+         }
+ 
++        // Gtavport (odin2/framegen): os shaders do LSFG traduzidos pelo dxbc declaram OpCapability VulkanMemoryModel.
++        VkPhysicalDeviceVulkanMemoryModelFeatures memoryModelFeatures = {};
++        memoryModelFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES;
++        memoryModelFeatures.pNext = featuresChain;
++        featuresChain = &memoryModelFeatures;
++
+         VkPhysicalDeviceFeatures2 deviceFeatures = {};
+         deviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+         deviceFeatures.pNext = featuresChain;
+@@ -4342,6 +4348,16 @@
+             createDeviceChain = &portabilityFeatures;
+         }
+ 
++        // Gtavport (odin2/framegen): as features que os shaders do LSFG pedem (as de imagem storage sem formato e os
++        // formatos estendidos já vêm em pEnabledFeatures, que liga tudo o que o driver anuncia).
++        memoryModelSupported = memoryModelFeatures.vulkanMemoryModel && deviceFeatures.features.shaderStorageImageWriteWithoutFormat &&
++                               deviceFeatures.features.shaderStorageImageReadWithoutFormat &&
++                               deviceFeatures.features.shaderStorageImageExtendedFormats;
++        if (memoryModelFeatures.vulkanMemoryModel) {
++            memoryModelFeatures.pNext = createDeviceChain;
++            createDeviceChain = &memoryModelFeatures;
++        }
++
+         // Only the per-draw (pipeline/dynamic) rate is used: coarse shading for chosen passes.
+         fragmentShadingRateSupported = shadingRateFound && shadingRateFeatures.pipelineFragmentShadingRate;
+         pipelineStatsEnabled = executableFound && executableFeatures.pipelineExecutableInfo;
+--- a/plume_vulkan.h
++++ b/plume_vulkan.h
+@@ -438,6 +438,7 @@
+         std::unique_ptr<RenderBuffer> nullBuffer;
+         bool loadStoreOpNoneSupported = false;
+         bool fragmentShadingRateSupported = false;
++        bool memoryModelSupported = false;  // Gtavport (odin2/framegen): vulkanMemoryModel + imagens storage sem formato
+         bool pipelineStatsEnabled = false;
+         bool pipelineStatsIR = false;  // Gtavport: GTAVPORT_PIPELINE_STATS=1 (not "stats"): also the IR  // Gtavport: GTAVPORT_PIPELINE_STATS=1 and the driver supports it
+         bool nullDescriptorSupported = false;

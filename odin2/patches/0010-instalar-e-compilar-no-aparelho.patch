@@ -1,6 +1,35 @@
+diff --git a/gtav/src/android_setup_jni.cpp b/gtav/src/android_setup_jni.cpp
+index d35ff62..40c2c12 100644
+--- a/gtav/src/android_setup_jni.cpp
++++ b/gtav/src/android_setup_jni.cpp
+@@ -96,6 +96,22 @@ JNIEXPORT jstring JNICALL Java_com_gtavrecomp_app_SetupActivity_nativeAdopt(JNIE
+   return env->NewStringUTF(N(error.empty() ? std::wstring(L"The check stopped.") : error).c_str());
+ }
+ 
++// Gtavport (odin2/android Odin2DeviceBuild): the whole install on the phone, no PC (install.cpp
++// RunDeviceBuild). `self` has the same callbacks as SetupActivity (onStage, onLog, onProgress,
++// isCancelled, onAsk). Returns null when done, else the error text.
++JNIEXPORT jstring JNICALL Java_com_gtavrecomp_app_Odin2DeviceBuild_nativeBuild(
++    JNIEnv* env, jobject self, jstring toolroot, jstring libdir, jstring home, jstring private_dir, jstring disc1,
++    jstring disc2, jstring tu) {
++  JavaUi ui(env, self);
++  loader::InstallInputs in{W(env, disc1), W(env, disc2), W(env, tu)};
++  std::wstring error;
++  bool ok = loader::RunDeviceBuild(std::filesystem::path(W(env, toolroot)), std::filesystem::path(W(env, libdir)),
++                                   std::filesystem::path(W(env, home)), std::filesystem::path(W(env, private_dir)),
++                                   in, ui, &error);
++  if (ok) return nullptr;
++  return env->NewStringUTF(N(error.empty() ? std::wstring(L"The build stopped.") : error).c_str());
++}
++
+ JNIEXPORT jboolean JNICALL Java_com_gtavrecomp_app_SetupActivity_nativeIsDataInstalled(JNIEnv* env, jclass,
+                                                                                          jstring home) {
+   return loader::IsDataInstalled(std::filesystem::path(W(env, home)));
+diff --git a/loader/src/install.cpp b/loader/src/install.cpp
+index 38e58cb..aa7738b 100644
 --- a/loader/src/install.cpp
 +++ b/loader/src/install.cpp
-@@ -42,11 +42,12 @@
+@@ -42,11 +42,12 @@ extern char** environ;
  #endif
  // The iPhone app's setup screen uses the copy stages only (RunDataInstall): iOS cannot start
  // processes, so nothing here that spawns one (codegen, clang, the game) runs there.
@@ -16,7 +45,7 @@
  
  #include <algorithm>
  #include <array>
-@@ -472,6 +473,29 @@
+@@ -472,6 +473,29 @@ struct Child {
  #endif
      std::vector<std::string> narrow = NarrowArgs(args);
      std::vector<char*> argv = Argv(narrow);
@@ -46,7 +75,7 @@
      posix_spawn_file_actions_t fa;
      posix_spawn_file_actions_init(&fa);
      posix_spawn_file_actions_addopen(&fa, 1, log.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-@@ -488,6 +512,7 @@
+@@ -488,6 +512,7 @@ struct Child {
      // The install runs in the background, like BELOW_NORMAL_PRIORITY_CLASS on Windows.
      setpriority(PRIO_PROCESS, id_t(pid), 10);
      return true;
@@ -54,7 +83,7 @@
    }
    // -1 while running. wait_ms < 0 waits until it exits.
    int Poll(int wait_ms = 0) {
-@@ -941,7 +966,7 @@
+@@ -990,7 +1015,7 @@ class Installer {
    //--- codegen ---------------------------------------------------------------
  
    bool Codegen() {
@@ -63,7 +92,7 @@
      fs::path gen = build / L"generated" / L"default";
      fs::path tools = root_ / L"tools" / L"game_dll";
      std::error_code ec;
-@@ -964,7 +989,7 @@
+@@ -1013,7 +1038,7 @@ class Installer {
      Log(L"Running codegen");
      fs::path log = data_ / L"logs" / L"codegen.log";
      Child c;
@@ -72,7 +101,7 @@
                  L"gtav_manifest.toml"};
      if (!c.Start(cmd, build, log)) return SetError(L"Could not start " + std::wstring(kCodegenExe));
      size_t want = expected_.gen.size();
-@@ -991,9 +1016,21 @@
+@@ -1040,9 +1065,21 @@ class Installer {
      return true;
    }
  
@@ -95,7 +124,7 @@
      size_t n = 0, bad = 0;
      std::wstring first_bad;
      for (auto& [name, exp] : expected_.gen) {
-@@ -1063,8 +1100,8 @@
+@@ -1112,8 +1149,8 @@ class Installer {
    }
  
    bool Compile() {
@@ -106,7 +135,7 @@
      fs::path fsdir = root_ / L"tools" / L"game_dll" / L"fs";
      // iPhone / Android: the phone shell's own hook header (package ios/ or android/ interface).
      fs::path iface = ios_       ? root_ / L"ios" / L"interface"
-@@ -1088,7 +1125,7 @@
+@@ -1137,7 +1174,7 @@ class Installer {
      if (!ios_ && !android_) sources.push_back(fsdir / L"fs_crt.cpp");  // x86 memcpy & co.; arm64 takes the system's
  #endif
  
@@ -115,7 +144,7 @@
      // Keep in sync with tools/game_dll/build_game_dll.py.
      Args flags;
      if (ios_) {
-@@ -1107,6 +1144,9 @@
+@@ -1156,6 +1193,9 @@ class Installer {
                 L"-march=armv8.2-a+lse+rcpc+dotprod", L"-fno-exceptions", L"-fno-rtti",
                 L"-fno-threadsafe-statics", L"-fno-math-errno", L"-w", L"-isystem",
                 (root_ / L"android" / L"include").wstring()};
@@ -125,7 +154,7 @@
      } else {
  #ifdef _WIN32
      flags = {L"--target=x86_64-pc-windows-msvc", L"-nostdinc++", L"-nostdlibinc", L"-O2",
-@@ -1143,6 +1183,12 @@
+@@ -1192,6 +1232,12 @@ class Installer {
          const fs::path& src = sources[next++];
          fs::path o = obj / (src.filename().wstring() + kObjExt);
          objects_.push_back(o);
@@ -138,7 +167,7 @@
          Running r{std::make_unique<Child>(), obj / (src.filename().wstring() + L".log"), src};
          Args cmd = {clang.wstring()};
          cmd.insert(cmd.end(), flags.begin(), flags.end());
-@@ -1328,14 +1374,101 @@
+@@ -1377,14 +1423,101 @@ class Installer {
      return true;
    }
  
@@ -241,7 +270,7 @@
      fs::path rsp = build / L"link_android.rsp";
      {
        std::ofstream f(rsp);
-@@ -1350,7 +1483,7 @@
+@@ -1399,7 +1532,7 @@ class Installer {
  #elif defined(__APPLE__)
      const fs::path lld = root_ / L"tools" / L"llvm" / L"bin" / L"ld64.lld";
  #else
@@ -250,7 +279,7 @@
  #endif
      auto gen = [](const fs::path& p) { return p.generic_wstring(); };
      fs::path tmp = out;
-@@ -1359,7 +1492,7 @@
+@@ -1408,7 +1541,7 @@ class Installer {
                  L"-z", L"now", L"-z", L"relro", L"-z", L"noexecstack", L"-z", L"max-page-size=16384",
                  L"--hash-style=gnu", L"-O1",
                  L"--version-script=" + gen(pkg / L"interface" / L"gtav_game.exports"), L"-o", gen(tmp),
@@ -259,7 +288,7 @@
      Child c;
      if (!c.Start(cmd, build, log)) return SetError(L"Could not start ld.lld");
      if (c.Poll(INFINITE) != 0) return SetError(L"Linking failed:\n" + Widen(Tail(log, 1500)));
-@@ -1691,6 +1824,13 @@
+@@ -1740,6 +1873,13 @@ class Installer {
    uint64_t copy_total_ = 0, copied_ = 0;
    bool ios_ = false;      // RunIphone: Compile for arm64 iOS
    bool android_ = false;  // RunAndroid: Compile for aarch64 Android
@@ -273,7 +302,7 @@
  };
  
  }  // namespace
-@@ -1863,6 +2003,12 @@
+@@ -1917,6 +2057,12 @@ bool Preflight(const fs::path& root, std::wstring* error) {
  }
  #endif
  
@@ -286,9 +315,11 @@
  bool RunInstall(const fs::path& root, const InstallInputs& in, InstallUi& ui, std::wstring* error) {
    Installer inst(root, root, in, ui);
    return inst.Run(error);
+diff --git a/loader/src/install.h b/loader/src/install.h
+index a282a5b..179905b 100644
 --- a/loader/src/install.h
 +++ b/loader/src/install.h
-@@ -43,6 +43,15 @@
+@@ -47,6 +47,15 @@ bool RunIphoneBuild(const std::filesystem::path& root, const std::filesystem::pa
  bool RunAndroidBuild(const std::filesystem::path& root, const std::filesystem::path& home, InstallUi& ui,
                       std::wstring* error);
  
@@ -304,28 +335,3 @@
  // root = the folder holding the launcher, gtav_fast.exe and tools\ (Linux: gtav_fast, tools/).
  bool IsInstalled(const std::filesystem::path& root);
  bool RunInstall(const std::filesystem::path& root, const InstallInputs& in, InstallUi& ui,
---- a/gtav/src/android_setup_jni.cpp
-+++ b/gtav/src/android_setup_jni.cpp
-@@ -85,6 +85,22 @@
-   return env->NewStringUTF(N(error.empty() ? std::wstring(L"The install stopped.") : error).c_str());
- }
- 
-+// Gtavport (odin2/android Odin2DeviceBuild): the whole install on the phone, no PC (install.cpp
-+// RunDeviceBuild). `self` has the same callbacks as SetupActivity (onStage, onLog, onProgress,
-+// isCancelled, onAsk). Returns null when done, else the error text.
-+JNIEXPORT jstring JNICALL Java_com_gtavrecomp_app_Odin2DeviceBuild_nativeBuild(
-+    JNIEnv* env, jobject self, jstring toolroot, jstring libdir, jstring home, jstring private_dir, jstring disc1,
-+    jstring disc2, jstring tu) {
-+  JavaUi ui(env, self);
-+  loader::InstallInputs in{W(env, disc1), W(env, disc2), W(env, tu)};
-+  std::wstring error;
-+  bool ok = loader::RunDeviceBuild(std::filesystem::path(W(env, toolroot)), std::filesystem::path(W(env, libdir)),
-+                                   std::filesystem::path(W(env, home)), std::filesystem::path(W(env, private_dir)),
-+                                   in, ui, &error);
-+  if (ok) return nullptr;
-+  return env->NewStringUTF(N(error.empty() ? std::wstring(L"The build stopped.") : error).c_str());
-+}
-+
- JNIEXPORT jboolean JNICALL Java_com_gtavrecomp_app_SetupActivity_nativeIsDataInstalled(JNIEnv* env, jclass,
-                                                                                          jstring home) {
-   return loader::IsDataInstalled(std::filesystem::path(W(env, home)));

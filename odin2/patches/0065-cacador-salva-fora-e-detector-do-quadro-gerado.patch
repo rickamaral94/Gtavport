@@ -1,0 +1,91 @@
+--- a/gtav/src/native/renderer.cpp
++++ b/gtav/src/native/renderer.cpp
+@@ -1077,6 +1077,9 @@
+     }
+     if (backend_ok_) backend_.FrameComplete(slot);
+     FlickerAnalyze(slot);
++#ifdef __ANDROID__
++    if (fg_) fg_->CheckSlot(slot);  // Gtavport (odin2/framegen): quadro gerado escuro?
++#endif
+   }
+ 
+   // --gtav_native_flicker_catch: every presented frame is copied to a per-slot readback buffer;
+@@ -1160,34 +1163,40 @@
+                     flick_count_, flick_hist_index_[1], odd, kBw * kBh, x0, y0, x1, y1,
+                     save ? "; frames saved to logs/flicker" : "");
+         if (save) {
+-          std::error_code ec;
+-          std::string dir = LogPath("flicker");
+-          std::filesystem::create_directories(dir, ec);
+-          auto write = [&](const std::vector<uint8_t>& img, uint64_t at, const char* tag) {
+-            if (FILE* f = std::fopen(fmt::format("{}/flicker_{:06}_{}.ppm", dir, at, tag).c_str(), "wb")) {
+-              std::fprintf(f, "P6\n%u %u\n255\n", kShotW, kShotH);
+-              std::fwrite(img.data(), 1, img.size(), f);
+-              std::fclose(f);
+-            }
+-          };
+-          write(flick_hist_rgb_[0], flick_hist_index_[0], "a_before");
+-          write(flick_hist_rgb_[1], flick_hist_index_[1], "b_glitch");
+-          write(rgb, index, "c_after");
+-          auto notes = [&](const std::vector<Backend::DrawNote>& list, uint64_t at, const char* tag) {
+-            std::ofstream out(fmt::format("{}/flicker_{:06}_{}.txt", dir, at, tag));
+-            uint32_t k = 0;
+-            for (const auto& n : list)
+-              out << fmt::format("{:4} vs {:016X} ps {:016X} rt {:08X} ds {:08X} vb {:08X}+{:X}/{} ib {:08X} "
+-                                 "start {} count {} prim {} bv {} tex {:08X} {:08X} {:08X} {:08X}{}{}{}{}\n",
+-                                 k++, n.vs, n.ps, n.rt0, n.depth, n.vb, n.vb_size, n.stride, n.ib, n.start, n.count,
+-                                 n.prim, n.base_vertex, n.tex[0], n.tex[1], n.tex[2], n.tex[3],
+-                                 n.copied ? " COPY" : "", n.rewritten ? " REWRITTEN" : "", n.skipped ? " SKIPPED" : "",
+-                                 n.uploads ? fmt::format(" UPLOADS {}", n.uploads) : "")
+-                  << fmt::format("     vsc {:.6g}\n", fmt::join(n.vsc, " "));
++          // Gtavport: written on a worker thread (copies of the three frames and their draw notes). On the render
++          // thread the three 2.7 MB images and the notes cost ~40 ms each time: 34 of the 45 "wait for slot" hitches
++          // of the 18/11 session were these saves.
++          struct Shot {
++            std::vector<uint8_t> rgb;
++            std::vector<Backend::DrawNote> notes;
++            uint64_t at;
++            const char* tag;
+           };
+-          notes(flick_hist_notes_[0], flick_hist_index_[0], "a_before");
+-          notes(flick_hist_notes_[1], flick_hist_index_[1], "b_glitch");
+-          notes(flick_notes_[slot], index, "c_after");
++          auto shots = std::make_shared<std::vector<Shot>>();
++          shots->push_back({flick_hist_rgb_[0], flick_hist_notes_[0], flick_hist_index_[0], "a_before"});
++          shots->push_back({flick_hist_rgb_[1], flick_hist_notes_[1], flick_hist_index_[1], "b_glitch"});
++          shots->push_back({rgb, flick_notes_[slot], index, "c_after"});
++          std::thread([shots, dir = LogPath("flicker")] {
++            std::error_code ec;
++            std::filesystem::create_directories(dir, ec);
++            for (const auto& sh : *shots) {
++              if (FILE* f = std::fopen(fmt::format("{}/flicker_{:06}_{}.ppm", dir, sh.at, sh.tag).c_str(), "wb")) {
++                std::fprintf(f, "P6\n%u %u\n255\n", kShotW, kShotH);
++                std::fwrite(sh.rgb.data(), 1, sh.rgb.size(), f);
++                std::fclose(f);
++              }
++              std::ofstream out(fmt::format("{}/flicker_{:06}_{}.txt", dir, sh.at, sh.tag));
++              uint32_t k = 0;
++              for (const auto& n : sh.notes)
++                out << fmt::format("{:4} vs {:016X} ps {:016X} rt {:08X} ds {:08X} vb {:08X}+{:X}/{} ib {:08X} "
++                                   "start {} count {} prim {} bv {} tex {:08X} {:08X} {:08X} {:08X}{}{}{}{}\n",
++                                   k++, n.vs, n.ps, n.rt0, n.depth, n.vb, n.vb_size, n.stride, n.ib, n.start, n.count,
++                                   n.prim, n.base_vertex, n.tex[0], n.tex[1], n.tex[2], n.tex[3],
++                                   n.copied ? " COPY" : "", n.rewritten ? " REWRITTEN" : "", n.skipped ? " SKIPPED" : "",
++                                   n.uploads ? fmt::format(" UPLOADS {}", n.uploads) : "")
++                    << fmt::format("     vsc {:.6g}\n", fmt::join(n.vsc, " "));
++            }
++          }).detach();
+         }
+       }
+     }
+@@ -1548,6 +1557,10 @@
+         if (got) {
+           plume::RenderTexture* gt = swapchain_->getTexture(gimage);
+           Framegen::FullBarrier(gl);
++          // (detector de quadro gerado escuro: o gerado e o real reduzidos, conferidos quando a fence do slot passar)
++          fg_->CaptureCheck(gl, slot, [this](plume::RenderCommandList* l, uint32_t d) {
++            backend_.Blit(l, d, plume::RenderFormat::R8G8B8A8_UNORM);
++          });
+           gl->barriers(plume::RenderBarrierStage::GRAPHICS,
+                        plume::RenderTextureBarrier(gt, plume::RenderTextureLayout::COLOR_WRITE));
+           gl->setFramebuffer(framebuffers_[gimage].get());

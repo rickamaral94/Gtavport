@@ -17,4 +17,29 @@ cmake -S "$G/gtav" -B "$B" -G Ninja \
   -DCMAKE_FIND_ROOT_PATH="$SDK" -Drexglue_DIR="$SDK/lib/cmake/rexglue" -DSDL3_DIR="$SDK/lib/cmake/SDL3" \
   -DCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY=ON >/dev/null
 nice cmake --build "$B" -j"${JOBS:-3}"
+# A libgtav_fast.so só pode importar da libgtav_game.so as funções do jogo (sub_*, gtavfs_*, rex_*). Um símbolo
+# gtav::native indefinido (ex.: função nossa dentro de namespace anônimo) passa no link de .so, mas o dlopen no
+# aparelho falha ("cannot locate symbol"), porque a libgtav_game.so de lá foi compilada sem ele.
+NM="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+bad=$("$NM" -D --undefined-only "$B/libgtav_fast.so" | awk '{print $NF}' | grep -E '^_ZN?K?4gtav6native' || true)
+if [ -n "$bad" ]; then
+  echo "ERRO: libgtav_fast.so importa símbolos gtav::native (o dlopen falharia no aparelho):" >&2
+  echo "$bad" >&2
+  exit 1
+fi
+# Todo símbolo que a libgtav_fast.so importa (fora os do jogo) precisa existir nas bibliotecas que ela declara, na API
+# mínima do app (30). Um que não existe passa no link (stub de outra lib ou API mais nova) e o dlopen falha no aparelho:
+# v0.5.0, ANativeWindow_setFrameRate (fica na libnativewindow.so, não na libandroid.so).
+T=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64 SR=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android
+DEFS=$(mktemp)
+for f in "$SR"/30/{libandroid,liblog,libm,libdl,libc,libOpenSLES}.so "$SR/libc++_shared.so" "$SDK/lib/librexruntime.so" \
+         "$SDK/lib/librexgpu-xenos.so"; do "$NM" -D --defined-only "$f" | awk '{print $NF}'; done | sed 's/@.*//' | sort -u > "$DEFS"
+missing=$("$NM" -D --undefined-only "$B/libgtav_fast.so" | awk '$1=="U"{print $2}' | sed 's/@.*//' | sort -u |
+          grep -vE '^(sub_|__imp__|gtavfs_|rex_|gtav_game_)' | comm -23 - "$DEFS" || true)
+rm -f "$DEFS"
+if [ -n "$missing" ]; then
+  echo "ERRO: libgtav_fast.so importa símbolos que as bibliotecas dela (API 30) não têm (o dlopen falharia no aparelho):" >&2
+  echo "$missing" >&2
+  exit 1
+fi
 ls -la "$B"/*.so

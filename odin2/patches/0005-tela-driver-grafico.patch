@@ -1,32 +1,5 @@
---- a/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
-+++ b/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
-@@ -112,7 +112,8 @@
-                 .setLongLabel("Run setup again (new game pack)")
-                 .setIntent(i)
-                 .build();
--            sm.setDynamicShortcuts(java.util.Collections.singletonList(info));
-+            // Gtavport: add (não set), para não apagar o atalho "Driver gráfico".
-+            sm.addDynamicShortcuts(java.util.Collections.singletonList(info));
-         } catch (Exception e) {
-             Log.w(TAG, "shortcut: " + e);
-         }
-@@ -202,6 +203,16 @@
-         install.setText("Install");
-         install.setOnClickListener(v -> onInstall());
-         box.addView(install);
-+        // Gtavport (odin2/android): escolha do driver Vulkan (sistema ou Turnip), se a tela existir.
-+        try {
-+            Class.forName("com.gtavrecomp.app.Odin2DriverActivity");
-+            Button driver = new Button(this);
-+            driver.setText("Graphics driver (Turnip / system)...");
-+            driver.setOnClickListener(v -> startActivity(new Intent().setClassName(this, "com.gtavrecomp.app.Odin2DriverActivity")));
-+            box.addView(driver);
-+        } catch (ClassNotFoundException e) {
-+            // APK do upstream: sem seletor de driver
-+        }
-         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-         progress.setMax(1000);
-         box.addView(progress);
+diff --git a/tools/android/app/AndroidManifest.xml b/tools/android/app/AndroidManifest.xml
+index 5eff34e..aaa4c33 100644
 --- a/tools/android/app/AndroidManifest.xml
 +++ b/tools/android/app/AndroidManifest.xml
 @@ -40,5 +40,16 @@
@@ -46,3 +19,34 @@
 +            android:configChanges="orientation|screenSize|keyboardHidden" />
      </application>
  </manifest>
+diff --git a/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java b/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
+index a7b398b..b7340fd 100644
+--- a/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
++++ b/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
+@@ -113,7 +113,8 @@ public class SetupActivity extends Activity {
+                 .setLongLabel("Run setup again (new game pack)")
+                 .setIntent(i)
+                 .build();
+-            sm.setDynamicShortcuts(java.util.Collections.singletonList(info));
++            // Gtavport: add (não set), para não apagar o atalho "Driver gráfico".
++            sm.addDynamicShortcuts(java.util.Collections.singletonList(info));
+         } catch (Exception e) {
+             Log.w(TAG, "shortcut: " + e);
+         }
+@@ -215,6 +216,16 @@ public class SetupActivity extends Activity {
+         install.setText("Install");
+         install.setOnClickListener(v -> onInstall());
+         box.addView(install);
++        // Gtavport (odin2/android): escolha do driver Vulkan (sistema ou Turnip), se a tela existir.
++        try {
++            Class.forName("com.gtavrecomp.app.Odin2DriverActivity");
++            Button driver = new Button(this);
++            driver.setText("Graphics driver (Turnip / system)...");
++            driver.setOnClickListener(v -> startActivity(new Intent().setClassName(this, "com.gtavrecomp.app.Odin2DriverActivity")));
++            box.addView(driver);
++        } catch (ClassNotFoundException e) {
++            // APK do upstream: sem seletor de driver
++        }
+         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+         progress.setMax(1000);
+         box.addView(progress);

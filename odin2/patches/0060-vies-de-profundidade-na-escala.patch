@@ -1,0 +1,14 @@
+--- a/gtav/src/native/backend.cpp
++++ b/gtav/src/native/backend.cpp
+@@ -5015,6 +5015,11 @@
+       PolygonOffset(r, d.primitive, bias);
+       bias[0] *= float(REXCVAR_GET(gtav_native_depth_bias_scale));
+       bias[1] *= float(REXCVAR_GET(gtav_native_depth_slope_scale));
++      // Gtavport: the slope part is per pixel; at --gtav_native_render_scale 1.5 a surface's depth changes 1.5x
++      // less per pixel, so the decals over the ground (snow tracks, road paint) got 2/3 of the separation the
++      // game asked for and z-fought (the ground flickered at 1080p on the Odin 2). The SDK's Vulkan path scales
++      // it by the resolution scale the same way ("more bias is better than less").
++      bias[1] *= std::max(1.0f, depth->scale);
+       if ((bias[0] != 0.0f || bias[1] != 0.0f) && bias_logged < 12 && bias_seen.insert(d.ps_hash ^ d.vs_hash).second) {
+         bias_logged++;
+         REXLOG_INFO("[native] polygon offset {:.6g} slope {:.6g}: vs {:016X} ps {:016X}", bias[0], bias[1], d.vs_hash,

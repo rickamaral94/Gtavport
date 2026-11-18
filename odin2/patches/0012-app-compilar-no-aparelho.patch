@@ -1,27 +1,5 @@
---- a/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
-+++ b/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
-@@ -88,6 +88,21 @@
-             startGame();
-             return;
-         }
-+        // Gtavport (Fase 1): this APK installs and builds the game on the device itself, no PC. Its
-+        // setup is Odin2DeviceBuildActivity; this screen (a pack made by a PC) only on request
-+        // ("odin2_pc", from that screen's advanced option).
-+        if (getIntent() == null || !getIntent().getBooleanExtra("odin2_pc", false)) {
-+            try {
-+                Class<?> dev = Class.forName("com.gtavrecomp.app.Odin2DeviceBuild");
-+                if ((boolean) dev.getDeclaredMethod("available", android.content.Context.class).invoke(null, this)) {
-+                    startActivity(new Intent().setClassName(this, "com.gtavrecomp.app.Odin2DeviceBuildActivity"));
-+                    finish();
-+                    return;
-+                }
-+            } catch (Exception e) {
-+                // APK do upstream: só o fluxo pelo PC
-+            }
-+        }
-         for (int i = 0; i < 4; i++) {
-             String s = prefs.getString("uri" + i, null);
-             if (s != null) picked[i] = Uri.parse(s);
+diff --git a/tools/android/app/AndroidManifest.xml b/tools/android/app/AndroidManifest.xml
+index b5804bf..de1de06 100644
 --- a/tools/android/app/AndroidManifest.xml
 +++ b/tools/android/app/AndroidManifest.xml
 @@ -12,6 +12,11 @@
@@ -52,9 +30,37 @@
 +            android:foregroundServiceType="dataSync" />
      </application>
  </manifest>
+diff --git a/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java b/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
+index a2fa5bb..e391574 100644
+--- a/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
++++ b/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
+@@ -89,6 +89,21 @@ public class SetupActivity extends Activity {
+             startGame();
+             return;
+         }
++        // Gtavport (Fase 1): this APK installs and builds the game on the device itself, no PC. Its
++        // setup is Odin2DeviceBuildActivity; this screen (a pack made by a PC) only on request
++        // ("odin2_pc", from that screen's advanced option).
++        if (getIntent() == null || !getIntent().getBooleanExtra("odin2_pc", false)) {
++            try {
++                Class<?> dev = Class.forName("com.gtavrecomp.app.Odin2DeviceBuild");
++                if ((boolean) dev.getDeclaredMethod("available", android.content.Context.class).invoke(null, this)) {
++                    startActivity(new Intent().setClassName(this, "com.gtavrecomp.app.Odin2DeviceBuildActivity"));
++                    finish();
++                    return;
++                }
++            } catch (Exception e) {
++                // APK do upstream: só o fluxo pelo PC
++            }
++        }
+         for (int i = 0; i < 4; i++) {
+             String s = prefs.getString("uri" + i, null);
+             if (s != null) picked[i] = Uri.parse(s);
+diff --git a/tools/android/build_apk.sh b/tools/android/build_apk.sh
+index bc91c15..93e3faa 100755
 --- a/tools/android/build_apk.sh
 +++ b/tools/android/build_apk.sh
-@@ -39,8 +39,10 @@
+@@ -39,8 +39,10 @@ if [ "${RELEASE:-0}" = 1 ]; then
  fi
  # Gtavport: ODIN2_PACKAGE troca o applicationId (as classes Java continuam com.gtavrecomp.app), para
  # o APK do Gtavport conviver com o do upstream sem conflito de assinatura nem perda de dados.

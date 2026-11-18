@@ -1,6 +1,8 @@
+diff --git a/gtav/src/native/renderer.cpp b/gtav/src/native/renderer.cpp
+index c3f7469..3b2756c 100644
 --- a/gtav/src/native/renderer.cpp
 +++ b/gtav/src/native/renderer.cpp
-@@ -27,6 +27,7 @@
+@@ -33,6 +33,7 @@
  #include <algorithm>
  #include <atomic>
  #include <cstdio>
@@ -8,7 +10,7 @@
  #include <cstdlib>
  #include <chrono>
  #include <condition_variable>
-@@ -39,6 +40,7 @@
+@@ -45,6 +46,7 @@
  #include <memory>
  #include <mutex>
  #include <string>
@@ -16,7 +18,7 @@
  #include <thread>
  #include <vector>
  #if defined(__APPLE__)
-@@ -687,7 +689,16 @@
+@@ -925,7 +927,16 @@ class Renderer {
  
    // Vulkan pipeline cache, persisted next to the exe so pipelines compiled once load in about a
    // millisecond on later runs. Saved periodically (the game exits without unwinding).

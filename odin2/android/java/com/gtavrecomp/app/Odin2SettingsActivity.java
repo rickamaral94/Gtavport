@@ -21,14 +21,16 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
     private final List<String> other = new ArrayList<>();  // comentários e chaves que não são desta tela
     private final Map<Item, String> keys = new LinkedHashMap<>();
     private boolean dirty;
-    private Item diagItem;
+    private Item diagItem, fgState;
+    private static final int REQ_DLL = 41;
 
     // Padrões do jogo no Android (os REXCVAR_DEFINE de cada opção).
     private static final String[][] DEFAULTS = {
             {"gtav_native_render_scale", "0.75"}, {"odin2_upscaler", "bilinear"}, {"odin2_fsr_sharpness", "0.2"},
             {"odin2_antialias", "off"}, {"gtav_native_max_anisotropy", "16"}, {"gtav_native_vsync", "true"},
             {"gtav_fps_limit", "30"}, {"gtav_native_fps", "false"}, {"gtav_touch_controls", "true"},
-            {"gtav_native_async_pipelines", "true"}, {"user_language", "1"}, {"gtav_native_light_coarse", "2"},
+            {"gtav_native_async_pipelines", "true"}, {"user_language", "1"}, {"gtav_native_light_coarse", "0"},
+            {"odin2_framegen", "false"}, {"odin2_fg_flow", "0.5"}, {"odin2_fg_performance", "false"},
     };
 
     @Override
@@ -105,9 +107,10 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
         Tab v = new Tab("Vídeo");
         tabs.add(v);
         opt(v, "gtav_native_render_scale", "Resolução interna",
-                "Parte de 1280x720 em que a cena 3D é desenhada. Menor = mais rápido e mais suave (use junto com um upscaler).",
-                new String[] {"0.5", "0.6", "0.67", "0.75", "0.85", "1"},
-                new String[] {"50%", "60%", "67%", "75%", "85%", "100% (720p nativo)"});
+                "Tamanho em que a cena 3D é desenhada, em relação a 1280x720. Menor = mais rápido e mais suave (use junto com um "
+                        + "upscaler). 150% = 1920x1080, a tela do Odin 2: imagem mais nítida, cerca de 2,25x o trabalho da GPU de 100%.",
+                new String[] {"0.5", "0.6", "0.67", "0.75", "0.85", "1", "1.5"},
+                new String[] {"50%", "60%", "67%", "75%", "85%", "100% (720p nativo)", "150% (1080p)"});
         opt(v, "odin2_upscaler", "Upscaler",
                 "Como a imagem chega ao tamanho da tela. Snapdragon GSR 1: uma passada, feito para Adreno (detecta a direção das bordas). "
                         + "AMD FSR 1: duas passadas, um pouco mais nítido e mais caro.",
@@ -121,9 +124,9 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
                 "Suaviza o serrilhado das bordas. FXAA: uma passada, leve, um pouco mais suave. SMAA 1x: três passadas, bordas mais nítidas, usa mais GPU.",
                 new String[] {"off", "fxaa", "smaa"}, new String[] {"Desligado", "FXAA", "SMAA 1x"});
         opt(v, "gtav_native_light_coarse", "Iluminação das luzes",
-                "Taxa de sombreamento das luzes da cena (postes, neon, luzes de Natal). A luz é suave: em 2x2 fica quase igual "
-                        + "e custa metade (uma sala com muitas luzes foi de ~15 para ~29 fps no Odin 2).",
-                new String[] {"2", "1", "0"}, new String[] {"Econômica (2x2)", "Equilibrada (2x1)", "Completa (por pixel)"});
+                "Taxa de sombreamento das luzes da cena (postes, neon, luzes de Natal). Experimental: no A/B do Odin 2 "
+                        + "não mudou o desempenho (13,7 para 13,9 fps), por isso o padrão é Completa.",
+                new String[] {"0", "1", "2"}, new String[] {"Completa (por pixel)", "Equilibrada (2x1)", "Econômica (2x2)"});
         opt(v, "gtav_native_max_anisotropy", "Filtro anisotrópico",
                 "Nitidez das texturas vistas de lado (chão, ruas ao longe). Diminua se a GPU for o gargalo.",
                 new String[] {"1", "2", "4", "8", "16"}, new String[] {"Desligado", "2x", "4x", "8x", "16x"});
@@ -147,6 +150,29 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
         opt(d, "gtav_native_fps", "Contador de FPS", "Mostra os quadros por segundo no canto da tela.", ON_OFF, ON_OFF_NAMES);
         opt(d, "gtav_touch_controls", "Controles na tela",
                 "Mostra o controle virtual na tela de toque. Com um controle conectado ele pode ficar desligado.", ON_OFF, ON_OFF_NAMES);
+        Tab g = new Tab("Geração de quadros");
+        tabs.add(g);
+        fgState = g.add(new Item("Shaders do Lossless.dll", Odin2Framegen.state(this)
+                + ". Toque para importar o Lossless.dll da SUA cópia do Lossless Scaling (Steam): os shaders são "
+                + "traduzidos aqui e o arquivo não é guardado. Nada dele vem no app.", this::pickDll));
+        opt(g, "odin2_framegen", "Geração de quadros 2x",
+                "O jogo continua em 30 quadros reais e a tela mostra 60: entre cada dois quadros reais entra um gerado "
+                        + "(LSFG 3.1, o do Lossless Scaling). Soma ~17 ms de atraso e uns 4 ms de GPU por quadro gerado. "
+                        + "Precisa dos shaders acima e do limite de FPS em 30.", ON_OFF, ON_OFF_NAMES);
+        opt(g, "odin2_fg_flow", "Escala do fluxo",
+                "Resolução em que o movimento é estimado. Menor = mais leve (no TOTK, 50% custou ~4 ms por quadro gerado "
+                        + "contra ~10 ms em 100%).",
+                new String[] {"0.5", "0.75", "1"}, new String[] {"50% (leve)", "75%", "100%"});
+        opt(g, "odin2_fg_performance", "Modo desempenho (LSFG 3.1P)",
+                "Shaders mais leves do próprio LSFG, com um pouco menos de qualidade nas bordas em movimento.", ON_OFF, ON_OFF_NAMES);
+        g.add(new Item("Remover shaders", "Apaga os shaders traduzidos (files/lsfg). Não mexe no seu Lossless.dll.", () ->
+                new AlertDialog.Builder(this).setMessage("Remover os shaders da geração de quadros?")
+                        .setPositiveButton("Remover", (x, y) -> {
+                            Odin2Framegen.remove(this);
+                            rebuild();
+                        })
+                        .setNegativeButton("Cancelar", null).show()));
+
         Tab p = new Tab("Desempenho");
         tabs.add(p);
         File req = new File(getExternalFilesDir(null), "diag_request.txt");
@@ -191,6 +217,26 @@ public class Odin2SettingsActivity extends Odin2GtaActivity {
         if (key == null) return;
         ini.put(key, item.value());
         dirty = true;
+    }
+
+    private void pickDll() {
+        startActivityForResult(new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(android.content.Intent.CATEGORY_OPENABLE).setType("*/*"), REQ_DLL);
+    }
+
+    @Override
+    protected void onActivityResult(int req, int res, android.content.Intent data) {
+        super.onActivityResult(req, res, data);
+        if (req != REQ_DLL || res != RESULT_OK || data == null || data.getData() == null) return;
+        android.net.Uri uri = data.getData();
+        android.widget.Toast.makeText(this, "Traduzindo os shaders do Lossless.dll…", android.widget.Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            String msg = Odin2Framegen.importDll(this, uri);
+            runOnUiThread(() -> {
+                new AlertDialog.Builder(this).setTitle("Geração de quadros").setMessage(msg).setPositiveButton("OK", null).show();
+                rebuild();
+            });
+        }).start();
     }
 
     @Override

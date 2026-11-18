@@ -1,14 +1,16 @@
+diff --git a/gtav/src/native/shader_compiler.cpp b/gtav/src/native/shader_compiler.cpp
+index ab5b5e8..272415e 100644
 --- a/gtav/src/native/shader_compiler.cpp
 +++ b/gtav/src/native/shader_compiler.cpp
-@@ -18,6 +18,7 @@
- #include <atomic>
+@@ -19,6 +19,7 @@
+ #include <chrono>
  #include <condition_variable>
  #include <cstdio>
 +#include <cstdlib>
  #include <cstring>
  #include <deque>
  #include <filesystem>
-@@ -75,6 +76,38 @@
+@@ -79,6 +80,38 @@ std::condition_variable g_intake_cv;
  bool g_intake_started = false;
  
  fs::path ToolsDir() { return ExeDir() / "tools"; }
@@ -47,7 +49,7 @@
  fs::path SpirvDirPath() {
    const std::string& dir = REXCVAR_GET(gtav_native_spirv_dir);
    return dir.empty() ? fs::path(DefaultSpirvDir()) : fs::path(dir);
-@@ -123,7 +156,7 @@
+@@ -127,7 +160,7 @@ bool CompileHlsl(const fs::path& hlsl, const std::string& name, bool pixel) {
  #ifdef _WIN32
    const fs::path dxc = tools / "dxc.exe";
  #else
@@ -56,7 +58,7 @@
  #endif
    std::vector<std::string> args = {dxc.string(), "-T", pixel ? "ps_6_0" : "vs_6_0", "-HV", "2021",
                                     "-all-resources-bound", "-spirv", "-fvk-use-dx-layout",
-@@ -131,6 +164,8 @@
+@@ -135,6 +168,8 @@ bool CompileHlsl(const fs::path& hlsl, const std::string& name, bool pixel) {
    if (!pixel) args.push_back("-fvk-invert-y");
    args.insert(args.end(), {"-Fo", tmp.string(), hlsl.string()});
    if (!Run(args)) return false;
@@ -65,7 +67,7 @@
    // Vertex shaders with computed-index fetches need the raw streams (see Backend::Shader).
    if (!pixel) {
      std::ifstream f(hlsl);
-@@ -215,10 +250,14 @@
+@@ -219,10 +254,14 @@ bool Compile(const std::string& name) {
  #ifdef _WIN32
    const fs::path xr = tools / "XenosRecomp.exe";
  #else

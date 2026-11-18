@@ -1,6 +1,8 @@
+diff --git a/gtav/src/native/renderer.cpp b/gtav/src/native/renderer.cpp
+index e9f6d06..c6bc937 100644
 --- a/gtav/src/native/renderer.cpp
 +++ b/gtav/src/native/renderer.cpp
-@@ -613,6 +613,7 @@
+@@ -851,6 +851,7 @@ class Renderer {
      }
      REXLOG_INFO("[native] using {}", device_->getDescription().name);
      perf::SetDeviceName(device_->getDescription().name);
@@ -8,7 +10,7 @@
      {
        const auto& caps = device_->getCapabilities();
        REXLOG_INFO("[native] device caps: geometry shader {}, descriptor indexing {}, scalar layout {}, "
-@@ -1362,6 +1363,7 @@
+@@ -1628,6 +1629,7 @@ class Renderer {
                    interval, frame.index, ms(record_end - record_start), ms(wait_end - wait_start),
                    st.pipelines_created, st.textures, st.draws, st.shader_ms, st.pipeline_ms, st.texture_ms,
                    st.resolve_ms);

@@ -1,0 +1,46 @@
+--- a/gtav/src/native/adreno_shader_fix.cpp
++++ b/gtav/src/native/adreno_shader_fix.cpp
+@@ -85,15 +85,18 @@
+       line = Sub(line, kAlu, [](const std::smatch& m) {
+         return std::string(Alu(m[1])) + ".c[" + std::to_string(std::stol(m[2]) / 16) + "]";
+       });
++      // Gtavport (from gtav-recomp-nx2 eddf03a, GPL-3.0): EXPR is base + min(a0, ..), capped only above;
++      // a0 can be negative (or INT_MIN from a NaN). Indexed uniform-buffer reads before the start of the
++      // block are undefined (garbage on Adreno, a GPU fault on NVK): clamp to the constant file.
+       line = Sub(line, kAluIndexed, [](const std::smatch& m) {
+-        return std::string(Alu(m[1])) + ".c[" + m[2].str() + "]";
++        return std::string(Alu(m[1])) + ".c[clamp(" + m[2].str() + ", 0, 255)]";
+       });
+       line = Sub(line, kShared, [](const std::smatch& m) {
+         long off = std::stol(m[2]) + (m[3].matched ? std::stol(m[3]) : 0);
+         return std::string(Cast(m[1])) + "(" + SharedWord(off) + ")";
+       });
+       line = Sub(line, kColorScale, [](const std::smatch& m) {
+-        return "asfloat(g_SC.u[" + std::to_string(std::stol(m[1]) / 16) + " + (INDEX)])";
++        return "asfloat(g_SC.u[clamp(" + std::to_string(std::stol(m[1]) / 16) + " + (INDEX), 0, 111)])";
+       });
+     }
+     // text.replace('(uint)(', '(')
+--- a/gtav/src/native/shader_compiler.cpp
++++ b/gtav/src/native/shader_compiler.cpp
+@@ -433,7 +433,7 @@
+ void InvalidateOldTranslations() {
+   const char* loop = std::getenv("XENOSRECOMP_PC_LOOP");
+   const bool keep_loop = loop && loop[0] == '1';
+-  const char* const kTranslatorVersion = keep_loop ? "gtavport-pc-loop" : "gtavport-forward-pc-1";
++  const char* const kTranslatorVersion = keep_loop ? "gtavport-pc-loop-ubo-clamp" : "gtavport-forward-pc-1-ubo-clamp";
+   const char* const stale = keep_loop ? "if (pc <= " : "switch (pc)";
+   std::error_code ec;
+   const fs::path marker = CacheDir() / "translator.version";
+@@ -448,7 +448,10 @@
+       if (e.path().extension() != ".hlsl") continue;
+       std::ifstream in(e.path());
+       std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+-      if (text.find(stale) == std::string::npos) continue;
++      // gtavport-ubo-clamp: indexed constant reads translated before the clamp (".c[(" without clamp).
++      const bool unclamped = text.find("Constants.c[(") != std::string::npos ||
++                             text.find("ShaderConstants.c[(") != std::string::npos || text.find(".c[(") != std::string::npos;
++      if (text.find(stale) == std::string::npos && !unclamped) continue;
+       const std::string name = e.path().stem().string();  // ps_<hash> or a variant ps_<hash><suffix>
+       for (const auto& f : fs::directory_iterator(SpirvDirPath(), ec))
+         if (f.path().extension() == ".spv" && f.path().stem().string().rfind(name, 0) == 0) fs::remove(f.path(), ec);

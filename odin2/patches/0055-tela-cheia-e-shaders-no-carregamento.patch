@@ -1,0 +1,77 @@
+--- a/tools/android/app/java/com/gtavrecomp/app/GameActivity.java
++++ b/tools/android/app/java/com/gtavrecomp/app/GameActivity.java
+@@ -65,6 +65,34 @@
+         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+     }
+ 
++    // Gtavport: back to full screen whenever the game regains focus (a screenshot, the notification shade or a
++    // dialog brought the status and navigation bars back and SDL left them there).
++    @Override
++    public void onWindowFocusChanged(boolean hasFocus) {
++        super.onWindowFocusChanged(hasFocus);
++        if (hasFocus) hideSystemBars();
++    }
++
++    @Override
++    protected void onResume() {
++        super.onResume();
++        hideSystemBars();
++    }
++
++    private void hideSystemBars() {
++        try {
++            android.view.Window w = getWindow();
++            w.setDecorFitsSystemWindows(false);
++            android.view.WindowInsetsController c = w.getInsetsController();
++            if (c != null) {
++                c.hide(android.view.WindowInsets.Type.systemBars());
++                c.setSystemBarsBehavior(android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
++            }
++        } catch (Exception e) {
++            Log.w(TAG, "tela cheia: " + e);
++        }
++    }
++
+     @Override
+     protected String[] getLibraries() {
+         // SDL3 is linked statically into librexruntime.so; loading libmain.so pulls in its deps.
+--- a/gtav/src/native/shader_compiler.cpp
++++ b/gtav/src/native/shader_compiler.cpp
+@@ -465,8 +465,37 @@
+               kTranslatorVersion, removed);
+ }
+ 
++// Gtavport: shaders saved in the cache (their .bin) but without SPIR-V (a first run cut short, or the
++// ones InvalidateOldTranslations just removed after a translator update: 2670 in v0.4.2) are queued
++// right away, so the workers translate them during the boot and loading screens instead of while the
++// game is played (v0.4.2: ~3 min of 250-1000 ms frames after the update).
++void QueueCachedWithoutSpirv() {
++  std::error_code ec;
++  if (!fs::exists(CacheDir(), ec) || !REXCVAR_GET(gtav_native_compile)) return;
++  std::vector<std::string> names;
++  for (const auto& e : fs::directory_iterator(CacheDir(), ec)) {
++    if (e.path().extension() != ".bin") continue;
++    const std::string name = e.path().stem().string();
++    if (name.rfind("ps_", 0) != 0 && name.rfind("vs_", 0) != 0) continue;
++    if (fs::exists(SpirvDirPath() / (name + ".spv"), ec)) continue;
++    names.push_back(name);
++  }
++  size_t queued = 0;
++  for (const std::string& name : names) {
++    {
++      std::lock_guard lock(g_mutex);
++      if (!g_seen.insert(name).second) continue;  // the game created it already: it is on its way
++      g_pending.fetch_add(1, std::memory_order_relaxed);
++    }
++    Enqueue(name);
++    queued++;
++  }
++  if (queued) REXLOG_INFO("[native] shader compiler: {} cached shaders without SPIR-V queued at start", queued);
++}
++
+ static void IntakeWorker() {
+   InvalidateOldTranslations();
++  QueueCachedWithoutSpirv();
+   for (;;) {
+     Intake item;
+     {

@@ -1,30 +1,12 @@
+diff --git a/gtav/src/native/menu.cpp b/gtav/src/native/menu.cpp
+index 6601e29..fc1add7 100644
 --- a/gtav/src/native/menu.cpp
 +++ b/gtav/src/native/menu.cpp
-@@ -419,7 +419,8 @@
-   uint32_t shaders_done = 0, shaders_pending = 0;
-   ShaderQueueStatus(&shaders_done, &shaders_pending);
-   const bool shader_notice = shaders_pending > 0;
--  if (!g_open && !touch_overlay && !shader_notice) return nullptr;
-+  const std::string diag_notice = perf::DiagStatus();  // Gtavport: "Medir desempenho" em andamento
-+  if (!g_open && !touch_overlay && !shader_notice && diag_notice.empty()) return nullptr;
+@@ -569,6 +569,7 @@ ImDrawData* Frame(uint32_t w, uint32_t h, uint32_t fps, double frame_ms, uint32_
+     }
+     if (now < g_notice_until) notice = g_notice;
+   }
++  if (notice.empty()) notice = perf::DiagStatus();  // Gtavport: "Medir desempenho" em andamento
+   if (!g_open && !touch_overlay && !pending_shaders && notice.empty()) return nullptr;
    EnsureContext(h);
    ImGuiContext* previous = ImGui::GetCurrentContext();
-   ImGui::SetCurrentContext(g_context);
-@@ -446,10 +447,13 @@
-   ImGui::NewFrame();
-   if (g_open) Build(fps, frame_ms);
-   if (touch_overlay) touch::Draw(ImGui::GetForegroundDrawList(), float(w), float(h));
--  if (shader_notice) {
--    char line[160];
--    std::snprintf(line, sizeof line, "Preparando os shaders deste aparelho: %u prontos, %u na fila (só na primeira vez)",
--                  shaders_done, shaders_pending);
-+  if (shader_notice || !diag_notice.empty()) {
-+    char line[200];
-+    if (shader_notice)
-+      std::snprintf(line, sizeof line, "Preparando os shaders deste aparelho: %u prontos, %u na fila (só na primeira vez)",
-+                    shaders_done, shaders_pending);
-+    else
-+      std::snprintf(line, sizeof line, "%s", diag_notice.c_str());
-     ImDrawList* dl = ImGui::GetForegroundDrawList();
-     const ImVec2 size = ImGui::CalcTextSize(line);
-     const float pad = 8.0f * g_scale, y = float(h) - size.y - 3 * pad;

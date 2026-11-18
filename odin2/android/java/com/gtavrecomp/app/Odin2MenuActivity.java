@@ -71,6 +71,7 @@ public class Odin2MenuActivity extends Odin2GtaActivity {
             if ("off".equals(item.value())) requestFile().delete();
             else java.nio.file.Files.write(requestFile().toPath(),
                     ("always".equals(item.value()) ? "60 always" : "ab".equals(item.value()) ? "600 ab"
+                            : "hdr".equals(item.value()) ? "600 hdr"
                             : "next600".equals(item.value()) ? "600" : "60")
                             .getBytes(java.nio.charset.StandardCharsets.UTF_8));
         } catch (Exception e) {
@@ -78,9 +79,35 @@ public class Odin2MenuActivity extends Odin2GtaActivity {
         }
     }
 
+    /**
+     * Logcat do app (todos os processos do mesmo UID, inclusive o do jogo) ao voltar ao menu: uma queda nativa
+     * do jogo (sinal, driver Vulkan) deixa as últimas linhas aqui, em logs/perf/last-session-logcat.txt, que o
+     * Exportar da tela Logs de desempenho inclui. Sem root: o Android deixa o app ler os próprios logs.
+     */
+    private void saveLastSessionLogcat() {
+        new Thread(() -> {
+            try {
+                java.io.File dir = new java.io.File(getExternalFilesDir(null), "logs/perf");
+                dir.mkdirs();
+                Process p = new ProcessBuilder("logcat", "-d", "-v", "threadtime", "-t", "6000")
+                        .redirectErrorStream(true).start();
+                try (java.io.InputStream in = p.getInputStream();
+                     java.io.OutputStream out = new java.io.FileOutputStream(new java.io.File(dir, "last-session-logcat.txt"))) {
+                    byte[] buf = new byte[1 << 16];
+                    int n;
+                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                }
+                p.waitFor();
+            } catch (Exception e) {
+                android.util.Log.w("Odin2Menu", "logcat da última sessão: " + e);
+            }
+        }, "last-session-logcat").start();
+    }
+
     @Override
     protected void onRestart() {
         super.onRestart();
+        saveLastSessionLogcat();  // o jogo (processo :game) acabou de sair: normal ou queda
         rebuild();  // o pedido "no próximo jogo" some depois do relatório
     }
 
@@ -99,17 +126,19 @@ public class Odin2MenuActivity extends Odin2GtaActivity {
         // Grava os primeiros 60 s de JOGO (sem menus, loading nem vídeos) e salva em logs/perf-diag-<data>.txt, a
         // mesma pasta do gtav.log (odin2_diag.cpp). O pedido é o arquivo diag_request.txt, lido no início do jogo.
         String cur = readRequest();
-        int idx = cur.endsWith("always") ? 3 : cur.endsWith("ab") ? 4 : cur.startsWith("600") ? 2
+        int idx = cur.endsWith("always") ? 3 : cur.endsWith("ab") ? 4 : cur.endsWith("hdr") ? 5 : cur.startsWith("600") ? 2
                 : cur.isEmpty() || cur.startsWith("0") ? 0 : 1;
         logsItem = m.add(new Item("Logs de desempenho",
                 "Grava os primeiros 60 s (ou 10 min) de jogo (só jogo: sem menus, loading nem vídeos; começa após 5 s jogando) e salva "
                         + "o relatório na pasta logs, junto do gtav.log: perf-diag-<data>.txt. Traz fps, travadas, GPU, clocks, "
                         + "temperatura, CPU de cada thread e as funções do jogo onde o tempo vai. Um aviso no canto mostra a gravação. "
-                        + "Comparar opções: a cada 10 s troca uma opção gráfica (luzes por pixel, teste de profundidade antigo, tudo a 2x2) "
-                        + "e compara: a imagem pode mudar um pouco durante a gravação.",
-                new String[] {"off", "next", "next600", "always", "ab"},
+                        + "Comparar opções: a cada 10 s troca uma opção gráfica (luzes a 2x2, teste de profundidade antigo, tudo a 2x2) "
+                        + "e compara: a imagem pode mudar um pouco durante a gravação. Isolar o passe HDR: lista os shaders que "
+                        + "desenham a cena e desliga um por vez por 10 s, para achar o que trava a GPU (partes da imagem somem "
+                        + "durante a gravação; fique parado numa cena que trava).",
+                new String[] {"off", "next", "next600", "always", "ab", "hdr"},
                 new String[] {"Desligado", "Próximo jogo (60 s)", "Próximo jogo (10 min)", "Em todo início (60 s)",
-                        "Comparar opções (A/B, 10 min)"}, idx));
+                        "Comparar opções (A/B, 10 min)", "Isolar o passe HDR (10 min)"}, idx));
         m.add(new Item("Ver logs gravados", "Os relatórios e as gravações, com exportação para Downloads.",
                 () -> startActivity(new Intent(this, Odin2PerfLogsActivity.class))));
         m.add(new Item("Reinstalar / recompilar", "Volta à tela de instalação: trocar os discos ou o Title Update, ou compilar o jogo de novo.",

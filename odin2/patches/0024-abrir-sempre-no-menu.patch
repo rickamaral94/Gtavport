@@ -1,6 +1,8 @@
+diff --git a/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java b/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
+index e391574..5fede44 100644
 --- a/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
 +++ b/tools/android/app/java/com/gtavrecomp/app/SetupActivity.java
-@@ -84,13 +84,11 @@
+@@ -85,13 +85,11 @@ public class SetupActivity extends Activity {
          // "Run setup again" (long-press the app icon) opens this screen even when the game is
          // installed: to choose a newer pack (README: objects missing -> Build for Android again).
          boolean again = getIntent() != null && getIntent().getBooleanExtra(EXTRA_SETUP, false);
@@ -17,7 +19,7 @@
          if (getIntent() == null || !getIntent().getBooleanExtra("odin2_pc", false)) {
              try {
                  Class<?> dev = Class.forName("com.gtavrecomp.app.Odin2DeviceBuild");
-@@ -103,6 +101,10 @@
+@@ -104,6 +102,10 @@ public class SetupActivity extends Activity {
                  // APK do upstream: só o fluxo pelo PC
              }
          }

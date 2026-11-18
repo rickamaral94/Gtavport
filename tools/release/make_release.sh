@@ -67,6 +67,9 @@ Passes de pós-processamento portados do BOTWRecompAndroid (MIT): FXAA; AMD Fide
 (EASU/RCAS, MIT); Snapdragon Game Super Resolution 1 (Qualcomm Innovation Center, BSD-3-Clause);
 SMAA (Jimenez et al., MIT). Drivers via libadrenotools (Billy Laws, BSD-2). APK de prova: LLVM 19.1.5
 (Apache-2.0 WITH LLVM-exception), DirectXShaderCompiler (University of Illinois/NCSA), XenosRecomp, SPIRV-Tools.
+Geração de quadros (odin2/framegen): integração do TOTKRecompAndroid (MIT); framegen do lsfg-vk-android (MIT),
+dxbc do DXVK (zlib), pe-parse (MIT), volk (MIT). Os shaders do LSFG vêm do Lossless.dll do próprio usuário,
+traduzidos no aparelho: nenhum deles está no APK.
 TXT
 (cd "$D" && zip -q -r -X "LICENSES-$TAG.zip" LICENSES && rm -rf LICENSES)
 

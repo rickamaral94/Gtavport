@@ -25,6 +25,19 @@ fetch_dep() {  # nome -> work/deps/<nome> limpo no pin
 }
 [ "${KEEP_DEPS:-0}" = 1 ] || rm -rf "$W/deps"
 for n in rexglue-sdk plume XenosRecomp libadrenotools; do fetch_dep "$n"; done
+# Frame gen (odin2/framegen): o lsfg-vk-android sem --recursive, porque o submódulo thirdparty/dxbc aponta para um
+# repositório que saiu do ar (PancakeTAS/dxbc). O mesmo commit vem da cópia GameNative/dxbc (lsfg-dxbc).
+fetch_lsfg() {
+  local d=$W/deps/lsfg-vk-android
+  [ -d "$d/.git" ] || git clone -q "$(url lsfg-vk-android)" "$d"
+  git -C "$d" fetch -q origin 2>/dev/null || true
+  git -C "$d" checkout -q -f "$(pin lsfg-vk-android)"
+  git -C "$d" submodule update -q --init thirdparty/pe-parse thirdparty/volk
+  [ -d "$d/thirdparty/dxbc/.git" ] || { rm -rf "$d/thirdparty/dxbc"; git clone -q "$(url lsfg-dxbc)" "$d/thirdparty/dxbc"; }
+  git -C "$d/thirdparty/dxbc" fetch -q origin 2>/dev/null || true
+  git -C "$d/thirdparty/dxbc" checkout -q -f "$(pin lsfg-dxbc)"
+}
+fetch_lsfg
 
 KEPT=$W/.kept
 rm -rf "$KEPT"
@@ -42,11 +55,20 @@ cp -a "$W/deps/XenosRecomp" "$W/gtav/thirdparty/XenosRecomp"
 
 dir_of() { case $1 in gtav) echo "$W/gtav";; rexglue-sdk) echo "$W/gtav/rexglue-sdk";;
   plume|XenosRecomp) echo "$W/gtav/thirdparty/$1";; *) echo "alvo desconhecido: $1" >&2; exit 1;; esac; }
+# work/gtav vem de um git archive (sem .git) e fica dentro deste repositório: sem o teto, o git apply acharia o
+# repositório do Gtavport, leria os caminhos do patch a partir da raiz dele e pularia tudo ("Skipped patch") com
+# código 0. Com o teto em work/, só o .git da própria árvore (rexglue-sdk, plume...) conta.
+export GIT_CEILING_DIRECTORIES=$W
 apply() {  # alvo patch
   local d; d=$(dir_of "$1")
   if ! git -C "$d" apply --whitespace=nowarn "$2" 2>/dev/null; then
     git -C "$d" apply --3way --whitespace=nowarn "$2" || { echo "FALHOU: $2 em $1" >&2; exit 1; }
   fi
+  # Um patch pulado sai com código 0: confere que cada arquivo novo/alterado chegou à árvore.
+  local f
+  for f in $(sed -n 's#^+++ b/##p' "$2" | cut -f1); do
+    [ -e "$d/$f" ] || { echo "FALHOU: $(basename "$2") não chegou a $1/$f" >&2; exit 1; }
+  done
   echo "  ok $1 <- $(basename "$2")"
 }
 echo "patches do upstream:"
@@ -60,6 +82,7 @@ done
 # Código do Gtavport que os patches incluem (odin2/post -> work/gtav/odin2_post).
 cp -r "$ROOT/odin2/post" "$W/gtav/odin2_post"
 cp -r "$ROOT/odin2/perf" "$W/gtav/odin2_perf"
+cp -r "$ROOT/odin2/framegen" "$W/gtav/odin2_framegen"
 if [ -d "$KEPT" ]; then
   [ -d "$KEPT/sdk-out" ] && mv "$KEPT/sdk-out" "$W/gtav/rexglue-sdk/out"
   [ -d "$KEPT/build" ] && mv "$KEPT/build" "$W/gtav/build"

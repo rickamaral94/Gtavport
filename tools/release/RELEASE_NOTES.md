@@ -1,8 +1,28 @@
 > [!WARNING]
-> **Pré-release em teste no aparelho.** As luzes da cena (postes, neon, luzes de Natal) passam a ser sombreadas em
-> blocos de 2x2: na sala com a árvore de Natal piscando, o A/B no Odin 2 mostrou a GPU caindo de ~61 para ~30 ms e
-> as travadas acima de 100 ms de 370 para 21 em 10 min. A luz é suave, então a imagem fica quase igual; o resto da
-> cena continua nítido. Para voltar ao normal: **Configurações > Vídeo > Iluminação das luzes = Completa**.
+> **Pré-release de teste: v0.5.4.**
+> - **Caçador de piscadas sem travar o jogo:** os quadros salvos (2,7 MB cada) agora são gravados noutra thread. Na
+>   sessão de 18/11 eles causaram 34 das 45 travadas por "espera do slot".
+> - **Detector de quadro gerado escuro** (sempre ligado com a geração de quadros, ~18 KB por quadro): compara o brilho do
+>   quadro gerado com o real; linhas `[fg] quadro gerado escuro` e a contagem a cada 10 s.
+> - **Teste do chão** em Caçar shader: "marcas do chão (viés de profundidade x8)". O GTA usa profundidade float24 e o
+>   port emula com float32; com o caçador ligado, passe pelo mesmo trecho com e sem e compare as piscadas.
+>
+> Da v0.5.3:
+> - **Caçar piscadas:** Select + R1 > Performance > Caçar shader > "Caçar piscadas". Compara cada quadro real do jogo com
+>   os vizinhos; os que destoam vão para o `gtav.log` (`flicker #`) e os grandes para `logs/flicker` (antes, durante e
+>   depois), incluídos na exportação de logs. Com a geração de quadros ligada, um preto que ele não pega veio de um
+>   quadro gerado.
+>
+> Da v0.5.2 (medição):
+> - **Por que cada efeito novo compila** (linhas `[pipe]` no `gtav.log`): PS novo, PS já visto com outro VS, mesmo par só
+>   com o bit de escala de render, mesmo par com outra constante, ou só estado — com o tempo de cada grupo. Decide o
+>   próximo passo contra as travadas ao entrar em área nova (docs/validacao-18-11.md, validado com o agente do Turnip).
+> - **Dica de desempenho do Android (ADPF):** a thread principal e a de render informam ao sistema a meta do quadro
+>   (33,3 ms a 30 fps) e o trabalho real; o sistema ajusta o clock dentro dos limites normais (não é overclock). Linhas
+>   `[adpf]` no log; `odin2_adpf=false` desliga.
+> - Da v0.5.1: geração de quadros 2x (LSFG 3.1, o seu Lossless.dll), testada no Odin: 60 na tela, p99 35 ms.
+>
+> Instala por cima sem perder saves; não precisa recompilar o jogo.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.

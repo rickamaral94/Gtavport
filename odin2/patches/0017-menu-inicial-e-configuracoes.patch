@@ -1,3 +1,5 @@
+diff --git a/tools/android/app/AndroidManifest.xml b/tools/android/app/AndroidManifest.xml
+index de1de06..88e7edf 100644
 --- a/tools/android/app/AndroidManifest.xml
 +++ b/tools/android/app/AndroidManifest.xml
 @@ -68,6 +68,19 @@

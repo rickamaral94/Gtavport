@@ -1,0 +1,13 @@
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -1725,7 +1725,9 @@
+             pipelineInfo.flags |= VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR | VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR;
+         }
+ 
+-        VkResult res = vkCreateGraphicsPipelines(device->vk, device->pipelineCache, 1, &pipelineInfo, nullptr, &vk);
++        // Gtavport: with GTAVPORT_PIPELINE_STATS=1 no VkPipelineCache, or the driver returns cached binaries
++        // without the final IR (Turnip: only "NIR from SPIRV", no "Final NIR" / "IR3 Assembly").
++        VkResult res = vkCreateGraphicsPipelines(device->vk, device->pipelineStatsEnabled ? VK_NULL_HANDLE : device->pipelineCache, 1, &pipelineInfo, nullptr, &vk);
+         if (res != VK_SUCCESS) {
+             fprintf(stderr, "vkCreateGraphicsPipelines failed with error code 0x%X.\n", res);
+             return;

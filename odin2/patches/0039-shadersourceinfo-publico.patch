@@ -1,0 +1,22 @@
+--- a/gtav/src/native/shader_compiler.cpp
++++ b/gtav/src/native/shader_compiler.cpp
+@@ -250,7 +250,7 @@
+   return ok;
+ }
+ 
+-std::string ShaderSourceInfo(const std::string& name) {
++std::string SourceInfo(const std::string& name) {  // ShaderSourceInfo (público, abaixo)
+   std::ifstream in(CacheDir() / (name + ".hlsl"));
+   if (!in) return "sem HLSL no cache (traduzido na instalação ou ainda não traduzido)";
+   size_t lines = 0, loops = 0, cases = 0;
+@@ -343,6 +343,10 @@
+ 
+ }  // namespace
+ 
++// Gtavport: fora do namespace anônimo. Dentro dele o símbolo ficava local, e a libgtav_fast.so ia buscá-lo na
++// libgtav_game.so do aparelho (dlopen falhava: "cannot locate symbol ...ShaderSourceInfo...").
++std::string ShaderSourceInfo(const std::string& name) { return SourceInfo(name); }
++
+ uint64_t CompileGeneration() { return g_generation.load(std::memory_order_acquire); }
+ 
+ uint32_t PendingShaders() { return g_pending.load(std::memory_order_relaxed); }

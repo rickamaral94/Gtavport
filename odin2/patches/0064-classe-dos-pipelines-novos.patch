@@ -1,0 +1,92 @@
+--- a/gtav/src/native/backend.cpp
++++ b/gtav/src/native/backend.cpp
+@@ -1795,6 +1795,52 @@
+   uint64_t shader_generation = 0;  // CompileGeneration() when the misses in `shaders` were cached
+   std::unordered_map<uint64_t, std::unique_ptr<RenderPipeline>> pipelines;
+   std::unordered_map<uint64_t, std::shared_ptr<PipelineJob>> pending_pipelines;
++  // Gtavport (docs/validacao-18-11.md): why each new pipeline compiles. In the Turnip the shaders' key is the VS+PS pair
++  // (and GS) plus the spec constants; target format, blend and vertex layout are not in it (~0.1 ms). So a new pipeline
++  // is: a PS never seen, a known PS with a new partner, a known pair with another spec (the render-scale bit or other
++  // bits), or a known pair+spec with other state only. Counted with the compile time, logged as [pipe].
++  struct PipeClasses {
++    std::unordered_set<uint64_t> ps, pair, pair_spec;
++    uint32_t n[5] = {};
++    double ms[5] = {};
++    uint64_t last_log = 0;
++    uint32_t logged_n = 0;
++  } pipe_classes;
++  static uint64_t PairKey(uint64_t vs_hash, uint64_t ps_hash, bool gs) {
++    return vs_hash * 0x9E3779B97F4A7C15ull ^ ps_hash ^ (gs ? 0x5555ull : 0);
++  }
++  int ClassifyPipeline(uint64_t vs_hash, uint64_t ps_hash, bool gs, uint32_t spec) {
++    auto& c = pipe_classes;
++    const uint64_t pair = PairKey(vs_hash, ps_hash, gs);
++    if (!c.ps.count(ps_hash)) return 0;
++    if (!c.pair.count(pair)) return 1;
++    if (!c.pair_spec.count(pair ^ (uint64_t(spec) << 1))) {
++      for (uint32_t other : {spec ^ kSpecScaled})
++        if (c.pair_spec.count(pair ^ (uint64_t(other) << 1))) return 2;
++      return 3;
++    }
++    return 4;
++  }
++  void NotePipeline(uint64_t vs_hash, uint64_t ps_hash, bool gs, uint32_t spec) {
++    auto& c = pipe_classes;
++    const uint64_t pair = PairKey(vs_hash, ps_hash, gs);
++    c.ps.insert(ps_hash);
++    c.pair.insert(pair);
++    c.pair_spec.insert(pair ^ (uint64_t(spec) << 1));
++  }
++  void CountPipeline(int cls, double ms) {
++    auto& c = pipe_classes;
++    c.n[cls]++;
++    c.ms[cls] += ms;
++    uint32_t total = c.n[0] + c.n[1] + c.n[2] + c.n[3] + c.n[4];
++    if (frame - c.last_log >= 300 && total != c.logged_n) {
++      c.last_log = frame;
++      c.logged_n = total;
++      REXLOG_INFO("[pipe] novos na sessão: PS novo {} ({:.0f} ms), PS visto com outro VS {} ({:.0f} ms), mesmo par só "
++                  "com o bit de escala {} ({:.0f} ms), mesmo par com outra spec {} ({:.0f} ms), só estado {} ({:.0f} ms)",
++                  c.n[0], c.ms[0], c.n[1], c.ms[1], c.n[2], c.ms[2], c.n[3], c.ms[3], c.n[4], c.ms[4]);
++    }
++  }
+   PipelineCompiler pipeline_compiler;
+   PipelineWarmer pipeline_warmer;
+   std::unordered_map<uint64_t, RenderTarget> targets;
+@@ -3922,7 +3968,10 @@
+         bool busy = false;
+         auto warmed = pipeline_warmer.Take(key, w.out, REXCVAR_GET(gtav_native_pipeline_wait_ms) - pipeline_wait_ms,
+                                            &pipeline_wait_ms, &busy);
+-        if (warmed) return (pipelines[key] = std::move(warmed)).get();
++        if (warmed) {
++          NotePipeline(vs_hash, ps ? ps_hash : 0, desc.geometryShader != nullptr, spec);
++          return (pipelines[key] = std::move(warmed)).get();
++        }
+         if (busy) return nullptr;
+       }
+       pipeline_warmer.Note(key, vs_hash, ps ? ps_hash : 0, w.out);
+@@ -3930,6 +3979,9 @@
+     stat_pipelines_created++;
+     if (PipelineStatsOn()) pipeline_desc_text[key] = DescribePipeline(desc);
+     if (REXCVAR_GET(gtav_native_async_pipelines) && !dumping) {
++      // (compilada noutra thread: conta a classe, sem o tempo)
++      CountPipeline(ClassifyPipeline(vs_hash, ps ? ps_hash : 0, desc.geometryShader != nullptr, spec), 0.0);
++      NotePipeline(vs_hash, ps ? ps_hash : 0, desc.geometryShader != nullptr, spec);
+       auto job = std::make_shared<PipelineJob>();
+       job->elements = std::move(elements);
+       job->slots = std::move(slots);
+@@ -3946,7 +3998,13 @@
+       pending_pipelines.erase(key);
+       return FinishPipeline(key, std::move(result));
+     }
+-    return FinishPipeline(key, device->createGraphicsPipeline(desc));
++    const bool has_gs = desc.geometryShader != nullptr;
++    const int cls = ClassifyPipeline(vs_hash, ps ? ps_hash : 0, has_gs, spec);
++    const auto t0 = std::chrono::steady_clock::now();
++    auto created = device->createGraphicsPipeline(desc);
++    CountPipeline(cls, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
++    NotePipeline(vs_hash, ps ? ps_hash : 0, has_gs, spec);
++    return FinishPipeline(key, std::move(created));
+   }
+ 
+   // A compile that failed (iPhone: the Metal compiler service dropped its connection under memory

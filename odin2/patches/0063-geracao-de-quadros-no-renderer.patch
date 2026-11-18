@@ -1,0 +1,271 @@
+--- a/gtav/src/native/backend.h
++++ b/gtav/src/native/backend.h
+@@ -87,6 +87,11 @@
+   void DrawCounter(plume::RenderCommandList* list, uint32_t value, int32_t x, int32_t y, uint32_t scale,
+                    plume::RenderFormat target_format);
+ 
++  // Gtavport (odin2/framegen): a texture of our own in the texture heap (layout GENERAL), for Blit; and its return
++  // (reused only after the frames in flight are done, like the cache's).
++  uint32_t RegisterTexture(plume::RenderTexture* texture, plume::RenderTextureView* view);
++  void ReleaseDescriptor(uint32_t descriptor);
++
+   // The settings menu's ImGui draw lists over the bound framebuffer (menu.cpp).
+   void DrawMenu(plume::RenderCommandList* list, const ImDrawData* data, plume::RenderFormat target_format);
+ 
+--- a/gtav/src/native/backend.cpp
++++ b/gtav/src/native/backend.cpp
+@@ -6532,6 +6532,17 @@
+   impl_->DrawCounter(list, value, x, y, scale, target_format);
+ }
+ 
++uint32_t Backend::RegisterTexture(RenderTexture* texture, RenderTextureView* view) {
++  auto& s = *impl_;
++  uint32_t d = s.AllocDescriptor();
++  if (d != kOverflow) s.texture_set->setTexture(d, texture, RenderTextureLayout::GENERAL, view);
++  return d;
++}
++
++void Backend::ReleaseDescriptor(uint32_t descriptor) {
++  if (descriptor && descriptor != kOverflow) impl_->pending_free_descriptors.push_back(descriptor);
++}
++
+ void Backend::Blit(RenderCommandList* list, uint32_t descriptor, RenderFormat target_format) {
+   impl_->BlitTo(list, descriptor, target_format);
+ }
+--- a/gtav/src/native/renderer.cpp
++++ b/gtav/src/native/renderer.cpp
+@@ -2,6 +2,11 @@
+ 
+ #include "renderer.h"
+ #include "odin2_perf.h"  // Gtavport: odin2/perf
++#ifdef __ANDROID__
++#include "odin2_framegen.h"  // Gtavport: odin2/framegen
++#include <android/native_window.h>
++#include <dlfcn.h>
++#endif
+ 
+ #include "backend.h"
+ #include "deferred_list.h"
+@@ -882,10 +887,25 @@
+       fences_[i] = device_->createCommandFence();
+       acquires_[i] = device_->createCommandSemaphore();
+       gpu_times_[i] = device_->createQueryPool(2);
++#ifdef __ANDROID__
++      fg_in_lists_[i] = queue_cmd_->createCommandList();
++      fg_gen_lists_[i] = queue_cmd_->createCommandList();
++      fg_acquires_[i] = device_->createCommandSemaphore();
++#endif
+     }
+     CreateFramebuffers();
+     REXLOG_INFO("[native] init: framebuffers created, backend init");
+     backend_ok_ = backend_.Init(device_.get());
++#ifdef __ANDROID__
++    if (backend_ok_) {
++      FramegenHost fh;
++      fh.device = device_.get();
++      fh.queue = queue_cmd_.get();
++      fh.register_texture = [this](plume::RenderTexture* t, plume::RenderTextureView* v) { return backend_.RegisterTexture(t, v); };
++      fh.free_descriptor = [this](uint32_t d) { backend_.ReleaseDescriptor(d); };
++      fg_ = std::make_unique<Framegen>(std::move(fh));
++    }
++#endif
+     REXLOG_INFO("[native] init: done");
+     if (!backend_ok_) REXLOG_ERROR("[native] backend init failed; showing clear color only");
+     return true;
+@@ -936,6 +956,8 @@
+       swapchain_.reset();  // destroys the old VkSurface before one is made on the window again
+       if (render_window_) ANativeWindow_release(render_window_);
+       render_window_ = fresh;
++      fg_rate_asked_ = -1;  // Gtavport (odin2/framegen): a janela nova não sabe da taxa pedida
++      if (fg_) fg_->Reset();
+       swapchain_ = queue_cmd_->createSwapChain(plume::RenderSwapChainDesc(render_window_, kSwapchainFormat,
+                                                                           kSwapchainBuffers));
+       swapchain_->setVsyncEnabled(vsync_);
+@@ -1455,9 +1477,112 @@
+       });
+     }
+     auto main_submit_end = std::chrono::steady_clock::now();
++    // Gtavport (odin2/framegen): com a geração de quadros, a imagem final (pós-processamento + barras pretas) vai para
++    // a entrada do framegen; ele gera o quadro do meio na fila; a janela recebe o gerado e depois este, um vsync cada.
++    bool fg_frame = false;
++    const ImDrawData* menu_data = nullptr;
++    bool menu_taken = false;
++    auto take_menu = [&](uint32_t mw, uint32_t mh) {
++      if (!menu_taken && backend_ok_) {
++        menu_taken = true;
++        double frame_ms = fps_value_ ? 1000.0 / fps_value_ : 0.0;
++        menu_data = menu::Frame(mw, mh, fps_value_, frame_ms, PendingShaders());
++      }
++      return menu_data;
++    };
++#ifdef __ANDROID__
++    {
++      const int want_rate = Framegen::Enabled() ? 60 : 0;  // (a tela a 60 Hz: na FIFO, cada imagem fica um vsync)
++      if (render_window_ && want_rate != fg_rate_asked_) {
++        // (procurada em tempo de execução: está na libnativewindow.so, não na libandroid.so; sem ela, nenhum pedido)
++        using SetFrameRateFn = int32_t (*)(ANativeWindow*, float, int8_t);
++        static const auto set_rate = [] {
++          void* h = dlopen("libnativewindow.so", RTLD_NOW | RTLD_NOLOAD);
++          if (!h) h = dlopen("libnativewindow.so", RTLD_NOW);
++          void* f = h ? dlsym(h, "ANativeWindow_setFrameRate") : nullptr;
++          if (!f) f = dlsym(RTLD_DEFAULT, "ANativeWindow_setFrameRate");
++          REXLOG_INFO("[fg] ANativeWindow_setFrameRate {}", f ? "disponível" : "ausente: a janela fica na taxa dela");
++          return reinterpret_cast<SetFrameRateFn>(f);
++        }();
++        if (set_rate) set_rate(render_window_, float(want_rate), ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_DEFAULT);
++        fg_rate_asked_ = want_rate;
++      }
++    }
++    const uint32_t sw = swapchain_->getWidth(), sh = swapchain_->getHeight();
++    // (só com VSync: o ritmo vem da FIFO; sem ela o quadro gerado seria trocado pelo real em seguida)
++    if (front && backend_ok_ && fg_ && vsync_ && fg_->Begin(sw, sh)) {
++      fg_frame = true;
++      // 1. a imagem final na entrada da vez
++      plume::RenderCommandList* in = fg_in_lists_[slot].get();
++      in->begin();
++      Framegen::FullBarrier(in);  // (o framegen e o blit para a janela leram a entrada dois quadros atrás)
++      float fw = float(sw), fh = float(sh), vw = fw, vh = fh;
++      if (fw * 9.0f > fh * 16.0f) vw = fh * 16.0f / 9.0f; else vh = fw * 9.0f / 16.0f;
++      const uint32_t post = backend_.PostProcess(in, front_descriptor, uint32_t(vw + 0.5f), uint32_t(vh + 0.5f));
++      in->barriers(plume::RenderBarrierStage::GRAPHICS,
++                   plume::RenderTextureBarrier(fg_->Input(), plume::RenderTextureLayout::COLOR_WRITE));
++      in->setFramebuffer(fg_->InputFramebuffer());
++      in->setViewports(plume::RenderViewport(0, 0, fw, fh));
++      in->setScissors(plume::RenderRect(0, 0, int32_t(sw), int32_t(sh)));
++      in->clearColor(0, plume::RenderColor(0.0f, 0.0f, 0.0f, 1.0f));
++      in->setViewports(plume::RenderViewport((fw - vw) * 0.5f, (fh - vh) * 0.5f, vw, vh));
++      backend_.Blit(in, post, plume::RenderFormat::R8G8B8A8_UNORM);
++      fg_->EndInput(in);
++      in->end();
++      const Framegen::Work work = fg_->PrepareWork();
++      submitter_.Push([this, in, work] {
++        const plume::RenderCommandList* l = in;
++        queue_cmd_->executeCommandLists(&l, 1, nullptr, 0, nullptr, 0, nullptr);
++        fg_->QueueWork(work);  // 2. o quadro gerado, na mesma fila, depois da entrada
++      });
++      // 3. o quadro gerado na janela, com o menu e o contador por cima
++      if (fg_->ShowGenerated()) {
++        plume::RenderCommandList* gl = fg_gen_lists_[slot].get();
++        gl->begin();
++        uint32_t gimage = 0;
++        bool got;
++        {
++          std::lock_guard lock(present_mutex_);
++          got = swapchain_->acquireTexture(fg_acquires_[slot].get(), &gimage);
++        }
++        if (got) {
++          plume::RenderTexture* gt = swapchain_->getTexture(gimage);
++          Framegen::FullBarrier(gl);
++          gl->barriers(plume::RenderBarrierStage::GRAPHICS,
++                       plume::RenderTextureBarrier(gt, plume::RenderTextureLayout::COLOR_WRITE));
++          gl->setFramebuffer(framebuffers_[gimage].get());
++          gl->setViewports(plume::RenderViewport(0, 0, fw, fh));
++          gl->setScissors(plume::RenderRect(0, 0, int32_t(sw), int32_t(sh)));
++          backend_.Blit(gl, fg_->OutputDescriptor(), kSwapchainFormat);
++          if (REXCVAR_GET(gtav_native_fps))
++            backend_.DrawCounter(gl, fps_value_, 8, 8, std::max(1u, sh / 720), kSwapchainFormat);
++          if (const ImDrawData* md = take_menu(sw, sh)) backend_.DrawMenu(gl, md, kSwapchainFormat);
++          gl->barriers(plume::RenderBarrierStage::NONE,
++                       plume::RenderTextureBarrier(gt, plume::RenderTextureLayout::PRESENT));
++          gl->end();
++          plume::RenderCommandSemaphore* gwait = fg_acquires_[slot].get();
++          plume::RenderCommandSemaphore* gsignal = release_[gimage].get();
++          submitter_.Push([this, gl, gwait, gsignal, gimage] {
++            plume::RenderCommandSemaphore* w = gwait;
++            plume::RenderCommandSemaphore* sg = gsignal;
++            const plume::RenderCommandList* l = gl;
++            queue_cmd_->executeCommandLists(&l, 1, &w, 1, &sg, 1, nullptr);
++            std::lock_guard lock(present_mutex_);
++            swapchain_->present(gimage, &sg, 1);
++          });
++          fps_frames_++;
++        } else {
++          gl->end();
++        }
++      }
++    }
++#endif
+     uint32_t image = 0;
+     list_ = present_lists_[slot].get();
+     list_->begin();
++#ifdef __ANDROID__
++    if (fg_frame) Framegen::FullBarrier(list_);  // (o quadro real sai da entrada do framegen)
++#endif
+     bool acquired;
+     {
+       std::lock_guard lock(present_mutex_);
+@@ -1469,6 +1594,9 @@
+ #endif
+     if (!acquired) {
+       list_->end();
++#ifdef __ANDROID__
++      if (fg_frame) fg_->EndFrame(), fg_->Reset();  // (o framegen recebeu este quadro; o próximo vai sozinho)
++#endif
+       if (backend_ok_) backend_.EndFrame(slot);
+       const plume::RenderCommandList* lists = list_;
+       plume::RenderCommandFence* fence = fences_[slot].get();
+@@ -1487,7 +1615,10 @@
+     // Gtavport (odin2_post): AA e upscaler do menu "Video" até o tamanho que a imagem ocupa na tela
+     // (a mesma conta do letterbox abaixo). Com as opções desligadas devolve o próprio front.
+     uint32_t present_descriptor = front_descriptor;
+-    if (front && backend_ok_) {
++#ifdef __ANDROID__
++    if (fg_frame) present_descriptor = fg_->InputDescriptor();  // (já com o pós-processamento e as barras pretas)
++#endif
++    if (front && backend_ok_ && !fg_frame) {
+       float fw = float(swapchain_->getWidth()), fh = float(swapchain_->getHeight()), vw = fw, vh = fh;
+ #if defined(__ANDROID__) || (defined(__APPLE__) && TARGET_OS_IPHONE)
+       if (fw * 9.0f > fh * 16.0f) vw = fh * 16.0f / 9.0f; else vh = fw * 9.0f / 16.0f;
+@@ -1545,7 +1676,7 @@
+     if (front) {
+ #if defined(__ANDROID__) || (defined(__APPLE__) && TARGET_OS_IPHONE)
+       // Phone screens are wider than 16:9: keep the game's aspect ratio with black bars.
+-      {
++      if (!fg_frame) {
+         float fw = float(w), fh = float(h), vw = fw, vh = fh;
+         if (fw * 9.0f > fh * 16.0f) vw = fh * 16.0f / 9.0f; else vh = fw * 9.0f / 16.0f;
+         list_->clearColor(0, plume::RenderColor(0.0f, 0.0f, 0.0f, 1.0f));
+@@ -1571,13 +1702,14 @@
+     if (backend_ok_ && REXCVAR_GET(gtav_native_fps))
+       backend_.DrawCounter(list_, fps_value_, 8, 8, std::max(1u, h / 720), kSwapchainFormat);
+     if (backend_ok_) {
+-      double frame_ms = fps_value_ ? 1000.0 / fps_value_ : 0.0;
+-      if (ImDrawData* menu_data = menu::Frame(w, h, fps_value_, frame_ms, PendingShaders()))
+-        backend_.DrawMenu(list_, menu_data, kSwapchainFormat);
++      if (const ImDrawData* md = take_menu(w, h)) backend_.DrawMenu(list_, md, kSwapchainFormat);
+     }
+     list_->barriers(plume::RenderBarrierStage::NONE,
+                     plume::RenderTextureBarrier(target, plume::RenderTextureLayout::PRESENT));
+     list_->end();
++#ifdef __ANDROID__
++    if (fg_frame) fg_->EndFrame();
++#endif
+     if (backend_ok_) backend_.EndFrame(slot);
+     const plume::RenderCommandList* lists = list_;
+     plume::RenderCommandSemaphore* wait = acquires_[slot].get();
+@@ -1941,6 +2073,13 @@
+   std::unique_ptr<plume::RenderCommandList> lists_[Backend::kFramesInFlight];
+   std::unique_ptr<DeferredCommandList> deferred_;  // --gtav_native_record_thread
+   std::unique_ptr<plume::RenderCommandList> present_lists_[Backend::kFramesInFlight];  // window copy
++#ifdef __ANDROID__
++  // Gtavport (odin2/framegen): a imagem final para a entrada do framegen, e o quadro gerado para a janela.
++  std::unique_ptr<plume::RenderCommandList> fg_in_lists_[Backend::kFramesInFlight], fg_gen_lists_[Backend::kFramesInFlight];
++  std::unique_ptr<plume::RenderCommandSemaphore> fg_acquires_[Backend::kFramesInFlight];
++  std::unique_ptr<Framegen> fg_;
++  int fg_rate_asked_ = -1;  // a taxa pedida à janela (60 com a geração ligada; 0: nenhuma em particular)
++#endif
+   std::unique_ptr<plume::RenderCommandFence> fences_[Backend::kFramesInFlight];
+   std::unique_ptr<plume::RenderQueryPool> gpu_times_[Backend::kFramesInFlight];  // main list start / end
+   uint64_t perf_seq_[Backend::kFramesInFlight] = {};  // Gtavport (odin2/perf): quadro de cada slot
+--- a/gtav/src/native/menu.cpp
++++ b/gtav/src/native/menu.cpp
+@@ -92,6 +92,9 @@
+     "odin2_fsr_sharpness",
+     "gtav_native_max_anisotropy",  // Gtavport: também na tela de configurações do app
+     "gtav_native_light_coarse",    // Gtavport: luzes do deferred a 2x2 (vale na hora)
++    "odin2_framegen",              // Gtavport (odin2/framegen): geração de quadros 2x
++    "odin2_fg_flow",
++    "odin2_fg_performance",
+ };
+ 
+ std::filesystem::path SettingsPath() { return ExeDir() / "gtav_settings.ini"; }
