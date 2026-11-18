@@ -74,3 +74,25 @@ Complemento do agente do Turnip: a spec constant também entra na chave da bibli
 caminho ajuda nos dois caminhos (não são excludentes). Passar para push constant custa um pouco de GPU (o ramo morto
 deixa de ser eliminado): desprezível para o bit de "alvo escalado" (só escala uma coordenada); manter a spec nos bits
 que ligam ou desligam blocos grandes. Ele mede instruções/registradores/waves dos dois jeitos com pares reais.
+
+## Medição da v0.5.2 (18/11, 10 min, mesma configuração)
+
+| | v0.5.1 | v0.5.2 (com ADPF) |
+|---|---|---|
+| p95 / p99 | 34,4 / 35,2 ms | 34,6 / 35,7 ms |
+| > 50 ms / > 100 ms | 32 / 6 | 30 / 5 |
+| Travadas de CPU do jogo | 16 | **0** |
+| Travadas de efeitos novos | 11 (1325 ms) | 22 (2942 ms; rota com mais áreas novas) |
+| Temperatura | 43–74 °C | 60–80 °C (começou com o aparelho quente) |
+
+`[pipe]` (pipelines compilados no draw): **PS nunca visto 154 (2189 ms, ~14 ms cada)**; PS já visto com outro VS 12
+(421 ms, ~35 ms cada); só o bit de escala 1 (4 ms); outra spec 0; só estado 45 (7 ms, ~0,15 ms cada, como o agente do
+Turnip previu).
+
+Conclusões:
+- Tirar a spec constant do caminho não vale (1 caso).
+- O custo é de shaders de pixel novos de verdade, que somem com o tempo de jogo (o cache guarda cada um no aparelho).
+- A pipeline library só ajuda se a biblioteca de FS puder ser compilada antes do primeiro draw. Próximo passo: medir o
+  intervalo entre o jogo criar o shader e o primeiro draw que o usa.
+- ADPF: sessão aceita pelo Android; trabalho médio 20–32 ms de 33,3 ms. As travadas de CPU do jogo sumiram nesta rota;
+  a temperatura maior precisa de outra sessão começando fria para separar o efeito.
