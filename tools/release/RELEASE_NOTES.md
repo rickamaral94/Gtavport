@@ -1,5 +1,11 @@
 > [!WARNING]
-> **Pré-release de teste: v0.5.2 — versão de medição.**
+> **Pré-release de teste: v0.5.3 — caçar as piscadas pretas.**
+> - **Caçar piscadas:** Select + R1 > Performance > Caçar shader > "Caçar piscadas". Compara cada quadro real do jogo com
+>   os vizinhos; os que destoam vão para o `gtav.log` (`flicker #`) e os grandes para `logs/flicker` (antes, durante e
+>   depois), incluídos na exportação de logs. Com a geração de quadros ligada, um preto que ele não pega veio de um
+>   quadro gerado.
+>
+> Da v0.5.2 (medição):
 > - **Por que cada efeito novo compila** (linhas `[pipe]` no `gtav.log`): PS novo, PS já visto com outro VS, mesmo par só
 >   com o bit de escala de render, mesmo par com outra constante, ou só estado — com o tempo de cada grupo. Decide o
 >   próximo passo contra as travadas ao entrar em área nova (docs/validacao-18-11.md, validado com o agente do Turnip).
