@@ -65,6 +65,12 @@ class Framegen {
   void EndFrame();
   // Sem quadro anterior utilizável (pausa longa, troca de janela): o próximo vai sozinho.
   void Reset();
+  // Detector de quadro gerado escuro (sempre ligado; ~18 KB por quadro): o gerado e o real reduzidos a 64x36 lado a
+  // lado (blit pelo backend), copiados para a CPU; depois da fence do slot, compara o brilho médio dos dois.
+  // CaptureCheck grava na lista (fora de passe de render); CheckSlot roda quando a fence do slot passou.
+  void CaptureCheck(plume::RenderCommandList* list, uint32_t slot,
+                    const std::function<void(plume::RenderCommandList*, uint32_t)>& blit);
+  void CheckSlot(uint32_t slot);
   // Uma linha para o log e o menu.
   std::string Status() const;
 

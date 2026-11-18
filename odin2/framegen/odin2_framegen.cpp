@@ -100,7 +100,14 @@ struct Framegen::Impl {
   std::string why;
   mutable std::mutex why_mutex;
   // contagem para o log
-  uint64_t st_real = 0, st_gen = 0;
+  uint64_t st_real = 0, st_gen = 0, st_dark = 0, dark_total = 0;
+  // detector de quadro gerado escuro
+  static constexpr uint32_t kCheckW = 64, kCheckH = 36;
+  std::unique_ptr<plume::RenderTexture> check_tex;
+  std::unique_ptr<plume::RenderFramebuffer> check_fb;
+  std::unique_ptr<plume::RenderBuffer> check_rb[4];
+  bool check_pending[4] = {};
+  uint64_t check_frame[4] = {};
   std::chrono::steady_clock::time_point st_since = std::chrono::steady_clock::now();
 
   void Fail(const std::string& reason) {
@@ -298,13 +305,63 @@ void Framegen::EndFrame() {
   s.have_prev = true;
   auto now = std::chrono::steady_clock::now();
   if (now - s.st_since >= std::chrono::seconds(10)) {
-    REXLOG_INFO("[fg] 10 s: {} quadros reais, {} gerados mostrados", s.st_real, s.st_gen);
-    s.st_real = s.st_gen = 0;
+    REXLOG_INFO("[fg] 10 s: {} quadros reais, {} gerados mostrados, {} gerados escuros", s.st_real, s.st_gen, s.st_dark);
+    s.st_real = s.st_gen = s.st_dark = 0;
     s.st_since = now;
   }
 }
 
 void Framegen::Reset() { impl_->have_prev = false; }
+
+void Framegen::CaptureCheck(plume::RenderCommandList* list, uint32_t slot,
+                            const std::function<void(plume::RenderCommandList*, uint32_t)>& blit) {
+  auto& s = *impl_;
+  if (slot >= 4) return;
+  using namespace plume;
+  if (!s.check_tex) {
+    s.check_tex = s.host.device->createTexture(RenderTextureDesc::ColorTarget(Impl::kCheckW * 2, Impl::kCheckH, kFormat));
+    const RenderTexture* color = s.check_tex.get();
+    RenderFramebufferDesc fb(&color, 1);
+    s.check_fb = s.host.device->createFramebuffer(fb);
+    for (auto& rb : s.check_rb)
+      rb = s.host.device->createBuffer(RenderBufferDesc::ReadbackBuffer(uint64_t(Impl::kCheckW) * 2 * Impl::kCheckH * 4));
+  }
+  list->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(s.check_tex.get(), RenderTextureLayout::COLOR_WRITE));
+  list->setFramebuffer(s.check_fb.get());
+  list->setScissors(RenderRect(0, 0, int32_t(Impl::kCheckW * 2), int32_t(Impl::kCheckH)));
+  list->setViewports(RenderViewport(0, 0, float(Impl::kCheckW), float(Impl::kCheckH)));
+  blit(list, OutputDescriptor());  // esquerda: o gerado
+  list->setViewports(RenderViewport(float(Impl::kCheckW), 0, float(Impl::kCheckW), float(Impl::kCheckH)));
+  blit(list, InputDescriptor());   // direita: o real deste quadro
+  list->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(s.check_tex.get(), RenderTextureLayout::COPY_SOURCE));
+  list->copyTextureRegion(RenderTextureCopyLocation::PlacedFootprint(s.check_rb[slot].get(), kFormat, Impl::kCheckW * 2,
+                                                                     Impl::kCheckH, 1, Impl::kCheckW * 2),
+                          RenderTextureCopyLocation::Subresource(s.check_tex.get()));
+  s.check_pending[slot] = true;
+  s.check_frame[slot] = s.count;
+}
+
+void Framegen::CheckSlot(uint32_t slot) {
+  auto& s = *impl_;
+  if (slot >= 4 || !s.check_pending[slot]) return;
+  s.check_pending[slot] = false;
+  const auto* px = static_cast<const uint8_t*>(s.check_rb[slot]->map());
+  if (!px) return;
+  double lum[2] = {};
+  for (uint32_t y = 0; y < Impl::kCheckH; y++)
+    for (uint32_t x = 0; x < Impl::kCheckW * 2; x++) {
+      const uint8_t* p = px + 4 * (y * Impl::kCheckW * 2 + x);
+      lum[x >= Impl::kCheckW] += (p[0] * 3 + p[1] * 6 + p[2]) / 10.0;
+    }
+  s.check_rb[slot]->unmap();
+  const double n = double(Impl::kCheckW) * Impl::kCheckH, gen = lum[0] / n, real = lum[1] / n;
+  if (real > 30.0 && gen < real * 0.4) {  // (o real tem imagem e o gerado saiu bem mais escuro)
+    s.st_dark++;
+    if (s.dark_total++ < 40)
+      REXLOG_WARN("[fg] quadro gerado escuro (real {}): brilho médio {:.0f} contra {:.0f} do quadro real", s.check_frame[slot],
+                  gen, real);
+  }
+}
 
 std::string Framegen::Status() const {
   auto& s = *impl_;
