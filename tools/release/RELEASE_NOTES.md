@@ -1,19 +1,15 @@
 > [!WARNING]
-> **Pré-release de teste: v0.4.10.**
-> - **Testes A/B/C saíram do menu Caçar shader.** Já cumpriram o papel; esquecidos ligados (sessão de 17/11 18:12)
->   deixavam a imagem borrada, traziam as listras de volta e dobravam o tempo da thread de render.
+> **Pré-release de teste: v0.5.0 — geração de quadros 2x (ainda não testada no aparelho).**
+> - **Geração de quadros (LSFG 3.1):** o jogo continua em 30 quadros reais e a tela mostra 60. Em Configurações >
+>   **Geração de quadros**: toque em "Shaders do Lossless.dll" e escolha o **Lossless.dll da sua cópia do Lossless
+>   Scaling** (Steam). Os shaders são traduzidos no aparelho; o DLL não é guardado e nada dele vem no app. Depois
+>   ligue "Geração de quadros 2x" (precisa de VSync e do limite de 30 FPS). Escala do fluxo 50% é a mais leve
+>   (~4 ms de GPU por quadro gerado no TOTK). Soma ~17 ms de atraso.
+> - O mesmo desenho do TOTK/BOTW: o framegen do lsfg-vk-android no nosso device e na nossa fila, o menu e o contador
+>   desenhados por cima do quadro gerado e do real.
+> - Da v0.4.10: testes A/B/C fora do menu; da v0.4.9: viés de profundidade na escala e atraso da GPU mínimo de 6 ms.
 >
-> Da v0.4.9:
-> - **Chão piscando (z-fighting):** a parte "por inclinação" do viés de profundidade é medida por pixel e não era
->   ajustada à escala de renderização: em 1080p (escala 1,5) as marcas sobre o chão (trilhas na neve, pintura da
->   estrada) recebiam 2/3 da separação que o jogo pede e brigavam com o terreno. Agora é multiplicada pela escala,
->   como o caminho Vulkan do SDK já fazia.
-> - **Atraso da GPU emulada mínimo de 6 ms no celular:** o valor medido pelo upstream contra o pisca-pisca; o 4
->   do preset "Máximo desempenho" nunca foi testado andando. Não custa GPU nem CPU (~2 ms a mais de latência).
-> - Da v0.4.8: a thread principal volta ao núcleo prime quando o Android a tira de lá (confirmado no Odin: o
->   Android liberou os 8 núcleos várias vezes na sessão e o jogo refixou).
->
-> Instala por cima sem perder saves; vindo da v0.4.2 ou mais nova, não precisa recompilar o jogo.
+> Instala por cima sem perder saves; não precisa recompilar o jogo.
 
 **Nenhum jogo está incluído, nem aqui nem em lugar nenhum.** Você precisa dos seus próprios Disc 1, Disc 2 e
 Title Update 27 do GTA V de Xbox 360. Código, shaders e dados do jogo são gerados **no seu aparelho** a partir dos seus discos e nunca são distribuídos.
